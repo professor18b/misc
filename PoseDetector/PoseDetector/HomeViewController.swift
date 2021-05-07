@@ -11,18 +11,16 @@ import AVFoundation
 class HomeViewController: BaseViewController {
     
     private let sourceManager = SourceManager.shared
+    private var pickerIdentifier: String?
     
-    override func viewDidLoad() {
-        super.viewDidLoad()
-    }
-    
-    @IBAction func pickVideoSource(_ sender: Any) {
+    @IBAction func pickVideoSource(_ sender: UIView) {
         let picker = UIImagePickerController()
         picker.delegate = self
         picker.mediaTypes = ["public.movie"]
         picker.videoMaximumDuration = 10
         picker.sourceType = UIImagePickerController.SourceType.savedPhotosAlbum
         picker.videoExportPreset = AVAssetExportPresetPassthrough
+        pickerIdentifier = sender.accessibilityIdentifier
         present(picker, animated: true)
     }
     
@@ -79,7 +77,20 @@ extension HomeViewController: UIImagePickerControllerDelegate, UINavigationContr
             guard let url = info[UIImagePickerController.InfoKey.mediaURL] as? NSURL else {
                 return
             }
-            VideoPlayerViewController.start(source: self, videoSource: AVURLAsset(url: url.absoluteURL!))
+            switch pickerIdentifier {
+            case "analyze":
+                do {
+                    let videoUrl = try sourceManager.copyVideoToDocument(sourceUrl: url.absoluteURL!, targetName: "analyze.mp4")
+                    AnalysisViewController.start(source: self, videoUrl: videoUrl)
+                } catch {
+                    DialogUtil.showAlert(viewController: self, title: nil, message: error.localizedDescription)
+                }
+                break
+            default:
+                VideoPlayerViewController.start(source: self, videoSource: AVURLAsset(url: url.absoluteURL!))
+                break
+            }
+            pickerIdentifier = nil
         }
     }
 }

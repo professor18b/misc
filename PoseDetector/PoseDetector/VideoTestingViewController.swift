@@ -9,6 +9,8 @@ import UIKit
 import AVFoundation
 import Vision
 
+private let lastResultOutput = ""
+
 class VideoTestingViewController: UIViewController {
     
     @IBOutlet weak var settingsLabel: UILabel!
@@ -30,20 +32,29 @@ class VideoTestingViewController: UIViewController {
     private var count = 0
     private var detected = 0
     private var failed = 0
+    private var skipped = 0
     private var detail = ""
     private var message = ""
     
     private var running = false
+    
+    private var lastResults = [Substring]()
         
     override func viewDidLoad() {
         NotificationCenter.default.addObserver(self, selector: #selector(notificationReceive), name: nil, object: nil)
         detectQueue.maxConcurrentOperationCount = 1
         loadSettings()
+        loadLastResults()
     }
     
     override func viewDidDisappear(_ animated: Bool) {
         NotificationCenter.default.removeObserver(self)
         super.viewDidDisappear(animated)
+    }
+    
+    private func loadLastResults() {
+        lastResults = lastResultOutput.split(separator: "\n")
+        print("lastResults.count: \(lastResults.count)")
     }
     
     private func loadSettings() {
@@ -99,6 +110,13 @@ class VideoTestingViewController: UIViewController {
         for entity in entities {
             if let videoIdObj = entity["sourceVideoId"] as? [String: Any] {
                 if let videoId = videoIdObj["id"] as? String {
+                    if (alreadyDetected(videoId: videoId)) {
+                        self.skipped += 1
+                        DispatchQueue.main.async {
+                            self.updateSummary()
+                        }
+                        continue
+                    }
                     self.sourceManager.downloadVideo(videoId: videoId) { videoId, videoUrl, errorMessage in
                         if let url = videoUrl {
                             if let result = self.detectionManager.detectVideo(asset: AVURLAsset(url: url)) {
@@ -141,7 +159,7 @@ class VideoTestingViewController: UIViewController {
                                     self.updateSummary()
                                 }
                             }
-                            self.sourceManager.deleteVideo(videoUrl: url)
+                            self.sourceManager.delete(sourceUrl: url)
                         } else {
                             self.detail += "F - \(videoId)\n"
                             self.failed += 1
@@ -155,6 +173,15 @@ class VideoTestingViewController: UIViewController {
             }
             semaphore.wait()
         }
+    }
+    
+    private func alreadyDetected(videoId: String) -> Bool {
+        for lastResult in lastResults {
+            if lastResult == videoId {
+                return true
+            }
+        }
+        return false
     }
     
     private func resetSummary(status: String? = nil) {
@@ -173,7 +200,7 @@ class VideoTestingViewController: UIViewController {
     
     private func updateSummary() {
         countLabel.text = "count: \(count)"
-        detectedLabel.text = "detected: \(detected), failed: \(failed)"
+        detectedLabel.text = "detected: \(detected), failed: \(failed), skipped: \(skipped)"
         messageLabel.text = message
         detailText.text = detail
     }

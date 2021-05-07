@@ -14,9 +14,9 @@ class SourceManager {
     private init() {
     }
     
-    func deleteVideo(videoUrl: URL) {
-        if FileManager.default.fileExists(atPath: videoUrl.path) {
-            try! FileManager.default.removeItem(atPath: videoUrl.path)
+    func delete(sourceUrl: URL) {
+        if FileManager.default.fileExists(atPath: sourceUrl.path) {
+            try! FileManager.default.removeItem(atPath: sourceUrl.path)
         }
     }
     
@@ -48,14 +48,10 @@ class SourceManager {
                     errorMessage = "statusCode: \(httpResponse.statusCode), requestUrl: \(requestUrl)"
                 } else {
                     if let downloadedUrl = downloadedFileUrl {
-                        assert(FileManager.default.fileExists(atPath: downloadedUrl.path), "invalid url: \(downloadedUrl)")
-                        if var documentUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                            documentUrl.appendPathComponent("\(videoId).mp4")
-                            self.deleteVideo(videoUrl: documentUrl)
-                            try! FileManager.default.moveItem(atPath: downloadedUrl.path, toPath: documentUrl.path)
-                            videoUrl = documentUrl
-                        } else {
-                            errorMessage = "document directory not exists"
+                        do {
+                            videoUrl = try self.moveVideoToDocument(sourceUrl: downloadedUrl, targetName: "\(videoId).mp4")
+                        } catch {
+                            errorMessage = error.localizedDescription
                         }
                     } else {
                         errorMessage = "downloaded file not found"
@@ -67,4 +63,27 @@ class SourceManager {
         task.resume()
         return task
     }
+    
+    func moveVideoToDocument(sourceUrl: URL, targetName: String) throws -> URL {
+        return try copyVideoToDocument(sourceUrl: sourceUrl, targetName: targetName, deleteSource: true)
+    }
+    
+    func copyVideoToDocument(sourceUrl: URL, targetName: String, deleteSource: Bool = false) throws -> URL {
+        assert(FileManager.default.fileExists(atPath: sourceUrl.path), "invalid url: \(sourceUrl)")
+        if var documentUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            documentUrl.appendPathComponent(targetName)
+            delete(sourceUrl: documentUrl)
+            if deleteSource {
+                try! FileManager.default.moveItem(atPath: sourceUrl.path, toPath: documentUrl.path)
+            } else {
+                try! FileManager.default.copyItem(atPath: sourceUrl.path, toPath: documentUrl.path)
+            }
+            return documentUrl
+        } else {
+            throw "document directory not exists"
+        }
+    }
+}
+
+extension String: Error {
 }

@@ -87,7 +87,10 @@ class ApiRequestManager {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = requestData
 
-        let urlSession = URLSession(configuration: .default, delegate: nil, delegateQueue: nil)
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 60
+        let urlSession = URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
         let task = urlSession.dataTask(with: request) { data, urlResponse, error in
             print("request thread: \(Thread.current)")
             var statusCode = -1

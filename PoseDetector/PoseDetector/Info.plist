@@ -27,6 +27,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>We need use camera to record your video</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>We need save skeleton video to your photo library</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

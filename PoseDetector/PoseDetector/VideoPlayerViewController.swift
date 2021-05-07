@@ -39,7 +39,7 @@ class VideoPlayerViewController: BaseViewController {
     override func viewDidDisappear(_ animated: Bool) {
         displayLink?.remove(from: RunLoop.current, forMode: .default)
         videoRenderView.player?.pause()
-        SourceManager.shared.deleteVideo(videoUrl: videoSource.url)
+        SourceManager.shared.delete(sourceUrl: videoSource.url)
         super.viewDidDisappear(animated)
     }
     
@@ -55,10 +55,7 @@ class VideoPlayerViewController: BaseViewController {
             videoRenderView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         
-        let displayLink = CADisplayLink(target: self, selector: #selector(handlerDisplayLink(_:)))
-        displayLink.preferredFramesPerSecond = 0 // use display's rate
-        displayLink.isPaused = true
-        displayLink.add(to: RunLoop.current, forMode: .default)
+        
                 
         guard let track = asset.tracks(withMediaType: .video).first else {
             DialogUtil.showAlert(viewController: self, title: nil, message: "load video failed")
@@ -71,6 +68,11 @@ class VideoPlayerViewController: BaseViewController {
         player.actionAtItemEnd = .pause
         player.play()
         player.rate = 0.5
+
+        let displayLink = CADisplayLink(target: self, selector: #selector(handlerDisplayLink(_:)))
+        displayLink.preferredFramesPerSecond = 0 // use display's rate
+        displayLink.isPaused = true
+        displayLink.add(to: RunLoop.current, forMode: .default)
         
         self.displayLink = displayLink
         playerItemOutput = output
