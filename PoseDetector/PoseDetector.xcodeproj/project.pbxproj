@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3A02E0D42646A4E300E9911A /* SkeletonRender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A02E0D32646A4E300E9911A /* SkeletonRender.swift */; };
 		3A065C452615A5B1005C1E28 /* SourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A065C442615A5B1005C1E28 /* SourceManager.swift */; };
 		3A065C4E2615C707005C1E28 /* VideoOutputViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A065C4D2615C707005C1E28 /* VideoOutputViews.swift */; };
 		3A0AF38326146A8900DB7AE3 /* HomeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0AF38226146A8900DB7AE3 /* HomeViewController.swift */; };
@@ -53,6 +54,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		3A02E0D32646A4E300E9911A /* SkeletonRender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonRender.swift; sourceTree = "<group>"; };
 		3A065C442615A5B1005C1E28 /* SourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceManager.swift; sourceTree = "<group>"; };
 		3A065C4D2615C707005C1E28 /* VideoOutputViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoOutputViews.swift; sourceTree = "<group>"; };
 		3A0AF38226146A8900DB7AE3 /* HomeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewController.swift; sourceTree = "<group>"; };
@@ -166,6 +168,7 @@
 				3A9B55CC261C666E0056B1B4 /* CameraViewController.swift */,
 				3A92EB5326355AFB001878E8 /* ImageViewController.swift */,
 				3A065C442615A5B1005C1E28 /* SourceManager.swift */,
+				3A02E0D32646A4E300E9911A /* SkeletonRender.swift */,
 				3ABA464A2626B6940007A4F4 /* PoseDetectionManager.swift */,
 				3AF83ACF263A5D210057D50E /* SwingAnalysisManager.swift */,
 				3ABA4694262829D50007A4F4 /* VideoTestingViewController.swift */,
@@ -336,6 +339,7 @@
 				3A92EB2126326F28001878E8 /* VideoPlayerViewController.swift in Sources */,
 				3A92EB362632A683001878E8 /* BaseViewController.swift in Sources */,
 				3A065C4E2615C707005C1E28 /* VideoOutputViews.swift in Sources */,
+				3A02E0D42646A4E300E9911A /* SkeletonRender.swift in Sources */,
 				3ABA464B2626B6940007A4F4 /* PoseDetectionManager.swift in Sources */,
 				3A0AF38326146A8900DB7AE3 /* HomeViewController.swift in Sources */,
 				3A9B55BD261C3CF30056B1B4 /* JointSegmentView.swift in Sources */,

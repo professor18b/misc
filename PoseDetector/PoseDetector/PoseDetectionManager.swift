@@ -7,8 +7,8 @@
 
 import Vision
 import AVFoundation
-import CryptoKit
 import Photos
+import UIKit
 
 class DetectedResult {
     let size: CGSize
@@ -102,7 +102,7 @@ class PoseDetectionManager {
             return nil
         }
         
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: PoseDetectionManager.outputSettings)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [String(kCVPixelBufferPixelFormatTypeKey): kCVPixelFormatType_32ARGB])
         reader.add(output)
         track.accessibilityElementCount()
         var size = CGSize(width: 0, height: 0)
@@ -116,47 +116,31 @@ class PoseDetectionManager {
             frameRate = track.nominalFrameRate
             let orientation = PoseDetectionManager.getTrackOrientation(track: track)
             
-            var writer: AVAssetWriter? = nil
-            var input: AVAssetWriterInput? = nil
+            var writer: SkeletonVideoWriter? = nil
+            
             if debug {
                 let targetName = "skeleton_\(asset.url.lastPathComponent)"
-                if var documentUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                    documentUrl.appendPathComponent(targetName, isDirectory: false)
-                    souceManager.delete(sourceUrl: documentUrl)
-                    writer = try! AVAssetWriter(outputURL: documentUrl, fileType: .mp4)
-                    let compressionProperties: [String: Any] = [
-                        AVVideoExpectedSourceFrameRateKey: frameRate,
-                        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
-                    ]
-                    let outputSettings: [String : Any] = [
-                        AVVideoCodecKey: AVVideoCodecType.h264,
-                        AVVideoWidthKey: size.width,
-                        AVVideoHeightKey: size.height,
-                        AVVideoCompressionPropertiesKey: compressionProperties
-                    ]
-                    print("outputSettings: \(outputSettings)")
-                    input = AVAssetWriterInput(mediaType: .video, outputSettings: outputSettings)
-                    writer?.add(input!)
-                    writer?.startWriting()
-                    writer?.startSession(atSourceTime: CMTime.zero)
+                if var exportUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                    exportUrl.appendPathComponent(targetName, isDirectory: false)
+                    souceManager.delete(sourceUrl: exportUrl)
+                    writer = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: size, frameRate: frameRate)
                 }
             }
-            
+            writer?.startSessionWriting()
             while let sampleBuffer = output.copyNextSampleBuffer() {
                 let joints = detect(sampleBuffer: sampleBuffer, orientation: orientation)
                 frameJoints.append(joints)
                 if hasJoint(joints: joints) {
                     jointFrames += 1
                 }
-                input?.append(sampleBuffer)
+                writer?.append(sampleBuffer: sampleBuffer, joints: joints, frameIndex: frameJoints.count - 1)
             }
-            input?.markAsFinished()
             writer?.finishWriting {
                 PHPhotoLibrary.shared().performChanges({
-                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: writer!.outputURL)
+                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: writer!.exportUrl)
                 }, completionHandler:{ success, error in
                     print("save photo library finished. success: \(success), error: \(error ?? "")")
-                    self.souceManager.delete(sourceUrl: writer!.outputURL)
+                    self.souceManager.delete(sourceUrl: writer!.exportUrl)
                 })
             }
         }
@@ -170,5 +154,64 @@ class PoseDetectionManager {
             }
         }
         return false
+    }
+}
+
+class SkeletonVideoWriter {
+    let exportUrl: URL
+    var writingFrame = 0
+    
+    private let writer: AVAssetWriter
+    private let input: AVAssetWriterInput
+    private let skelentonRender: SkeletonRender
+    
+    init(exportUrl: URL, videoSize: CGSize, frameRate: Float) {
+        self.exportUrl = exportUrl
+        skelentonRender = SkeletonRender(frame: CGRect(x: 0, y: 0, width: videoSize.width, height: videoSize.height))
+        let compressionProperties: [String: Any] = [
+            AVVideoExpectedSourceFrameRateKey: frameRate,
+            AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+        ]
+        
+        let outputSettings: [String : Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: videoSize.width,
+            AVVideoHeightKey: videoSize.height,
+            AVVideoCompressionPropertiesKey: compressionProperties
+        ]
+        input = AVAssetWriterInput(mediaType: .video, outputSettings: outputSettings)
+        writer = try! AVAssetWriter(outputURL: exportUrl, fileType: .mp4)
+        writer.add(input)
+    }
+    
+    func startSessionWriting(atSourceTime: CMTime = CMTime.zero) {
+        writer.startWriting()
+        writer.startSession(atSourceTime: atSourceTime)
+    }
+    
+    func finishWriting(completionHandler: @escaping () -> Void) {
+        input.markAsFinished()
+        writer.finishWriting(completionHandler: completionHandler)
+    }
+    
+    func append(sampleBuffer: CMSampleBuffer, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint], frameIndex: Int = -1) {
+        guard let cvImageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            fatalError("create cvImageBuffer error")
+        }
+        CVPixelBufferLockBaseAddress(cvImageBuffer, .readOnly)
+        let baseAddress = CVPixelBufferGetBaseAddress(cvImageBuffer)
+        let width = CVPixelBufferGetWidth(cvImageBuffer)
+        let height = CVPixelBufferGetHeight(cvImageBuffer)
+        let bitsPerComponent = 8
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(cvImageBuffer)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue
+        guard let cgContext = CGContext(data: baseAddress, width: width, height: height, bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: bitmapInfo) else {
+            fatalError("create cgContext error")
+        }
+        CVPixelBufferUnlockBaseAddress(cvImageBuffer, .readOnly)
+        skelentonRender.render(in: cgContext, joints: joints, frameIndex: frameIndex)
+        input.append(sampleBuffer)
+        writingFrame += 1
     }
 }

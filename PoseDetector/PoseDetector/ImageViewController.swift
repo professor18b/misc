@@ -27,8 +27,10 @@ class ImageViewController: BaseViewController {
         imageView.contentMode = UIView.ContentMode.scaleAspectFit
         view.addSubview(imageView)
         
-        view.addSubview(jointSegmentView)
-        jointSegmentView.updateJoints(cgImage: imageSource.cgImage!, orientation: convertOrientation(imageOrientation: imageSource.imageOrientation), sourceView: imageView)
+//        imageView.image?.cgImage.
+        
+//        view.addSubview(jointSegmentView)
+//        jointSegmentView.updateJoints(cgImage: imageSource.cgImage!, orientation: convertOrientation(imageOrientation: imageSource.imageOrientation), sourceView: imageView)
     }
     
     private func convertOrientation(imageOrientation: UIImage.Orientation?) -> CGImagePropertyOrientation {
