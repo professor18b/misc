@@ -10,8 +10,8 @@ import AVFoundation
 
 class VideoPlayerViewController: BaseViewController {
     
-    static func start(source: BaseViewController, videoSource: AVURLAsset) {
-        source.performSegueWithArguments(withIdentifier: "ShowVideoPlayerView", arguments: ["videoSource": videoSource])
+    static func start(source: BaseViewController, videoUrl: URL) {
+        source.performSegueWithArguments(withIdentifier: "ShowVideoPlayerView", arguments: ["videoUrl": videoUrl])
     }
     
     // video file playback management
@@ -28,7 +28,10 @@ class VideoPlayerViewController: BaseViewController {
     private let detectionManager = PoseDetectionManager.shared
 
     override func processSegueArguments(arguments: [String : Any]) {
-        videoSource = arguments["videoSource"] as? AVURLAsset
+        guard let url = arguments["videoUrl"] as? URL else {
+            fatalError("video url not found")
+        }
+        videoSource = AVURLAsset(url: url)
     }
     
     override func viewDidLoad() {

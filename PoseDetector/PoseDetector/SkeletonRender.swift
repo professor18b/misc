@@ -63,26 +63,62 @@ class SkeletonRender {
     
     private let allSegments = [segmentsOfRightArm, segmentsOfLeftArm, segmentsOfShoulder, segmentsOfSpine, segmentsOfHip, segmentsOfRightLeg, segmentsOfLeftLeg]
     
-    private let jointRadius: CGFloat = 9
-    private let jointDiameter: CGFloat = 18
+    private let analysisManager = SwingAnalysisManager.shared
     private let jointColor = CGColor(red: 1, green: 1, blue: 1, alpha: 0.8)
     private let jointSegmentColor = CGColor(red: 0, green: 1, blue: 0, alpha: 0.8)
     
     let frame: CGRect
+    let orientation: CGImagePropertyOrientation
     
-    init(frame: CGRect) {
-        self.frame = frame
+    
+    private var scaled: CGFloat?
+    private var jointRadius: CGFloat = 0
+    private var jointDiameter: CGFloat = 0
+    
+    private let scalingTransform: CGAffineTransform
+    private let contextRotation: CGFloat?
+    private let contextTranslation: CGPoint?
+    
+    init(videoSize: CGSize, orientation: CGImagePropertyOrientation) {
+        self.orientation = orientation
+        switch orientation {
+        case .right:
+            frame = CGRect(x: 0, y: 0, width: videoSize.height, height: videoSize.width)
+            contextRotation = .pi / 2
+            contextTranslation = CGPoint(x: videoSize.width, y: 0)
+        default:
+            frame = CGRect(x: 0, y: 0, width: videoSize.width, height: videoSize.height)
+            contextRotation = nil
+            contextTranslation = nil
+        }
+        
+        scalingTransform = CGAffineTransform(scaleX: frame.width, y: frame.height)
+        print("skeletonRender, frame: \(frame), orientation: \(orientation.rawValue), scalingTransform: \(scalingTransform)")
     }
     
-    func render(in cgContext: CGContext, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint], frameIndex: Int = -1) {
-        // scale points
-        let scaleToBounds = CGAffineTransform(scaleX: frame.width, y: frame.height)
-        var scaledJoints: [VNHumanBodyPoseObservation.JointName: CGPoint] = [:]
+    func render(in cgContext: CGContext, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint], debugContext: DebugContext? = nil) {
+        // calculate scale
+        if scaled == nil {
+            scaled = calculateScale(joints: joints)
+            if let scaled = scaled {
+                jointRadius = 9 * scaled
+                jointDiameter = jointRadius * 2
+            }
+        }
+        // transform points
+        var transformedJoints: [VNHumanBodyPoseObservation.JointName: CGPoint] = [:]
         for entry in joints {
-            let scaledPoint =  entry.value.location.applying(scaleToBounds)
-            scaledJoints[entry.key] = scaledPoint
+            let point = entry.value.location.applying(scalingTransform)
+            transformedJoints[entry.key] = point
         }
         cgContext.saveGState()
+        if let translation = contextTranslation {
+            cgContext.translateBy(x: translation.x, y: translation.y)
+        }
+        if let rotation = contextRotation {
+            cgContext.rotate(by: rotation)
+        }
+        
         // draw all the joint segments
         cgContext.setStrokeColor(jointSegmentColor)
         cgContext.setLineCap(.round)
@@ -94,10 +130,10 @@ class SkeletonRender {
             while index < segments.count - 1 {
                 let start = segments[index]
                 let end = segments[index + 1]
-                if let startScaled = scaledJoints[start] {
-                    if let endScaled = scaledJoints[end] {
-                        cgContext.move(to: startScaled)
-                        cgContext.addLine(to: endScaled)
+                if let startPoint = transformedJoints[start] {
+                    if let endPoint = transformedJoints[end] {
+                        cgContext.move(to: startPoint)
+                        cgContext.addLine(to: endPoint)
                     }
                 }
                 index += 1
@@ -106,38 +142,86 @@ class SkeletonRender {
         cgContext.drawPath(using: .stroke)
         // draw all the joints
         cgContext.setFillColor(jointColor)
-        for entry in scaledJoints {
+        for entry in transformedJoints {
             addJointCirclr(cgContext: cgContext, point: entry.value)
         }
         cgContext.drawPath(using: .fill)
-        // debug wrist --------------------------
-        cgContext.setFillColor(CGColor(red: 1, green: 0, blue: 1, alpha: 0.8))
-        addJointCirclr(cgContext: cgContext, point: scaledJoints[.leftWrist])
-        addJointCirclr(cgContext: cgContext, point: scaledJoints[.rightWrist])
-        cgContext.drawPath(using: .fill)
         
-        cgContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 0.8))
-        if let leftWristPoint = scaledJoints[.leftWrist] {
-            if let rightWristPoint = scaledJoints[.rightWrist] {
-                let centerPoint = CGPoint(x: (leftWristPoint.x + rightWristPoint.x) / 2, y: (leftWristPoint.y + rightWristPoint.y) / 2)
-                addJointCirclr(cgContext: cgContext, point: centerPoint)
+        // debug --------------------------
+        if let context = debugContext {
+            // draw writed wrist track
+            var lastCenterPoint: CGPoint? = nil
+            if !context.writedFrameJoints.isEmpty {
+                cgContext.setStrokeColor(CGColor(red: 0, green: 0.5, blue: 0.5, alpha: 0.6))
+                index = 0
+                while index < context.writedFrameJoints.count - 1 {
+                    let start = context.writedFrameJoints[index]
+                    let startLeftPoint =  start[.leftWrist]?.location.applying(scalingTransform)
+                    let startRightPoint =  start[.rightWrist]?.location.applying(scalingTransform)
+                    let startCenter = getCenterPoint(leftPoint: startLeftPoint, rightPoint: startRightPoint)
+                    let end = context.writedFrameJoints[index + 1]
+                    let endLeftPoint =  end[.leftWrist]?.location.applying(scalingTransform)
+                    let endRightPoint =  end[.rightWrist]?.location.applying(scalingTransform)
+                    let endCenter = getCenterPoint(leftPoint: endLeftPoint, rightPoint: endRightPoint)
+                    if startCenter != nil && endCenter != nil {
+                        cgContext.move(to: startCenter!)
+                        cgContext.addLine(to: endCenter!)
+                        lastCenterPoint = endCenter
+                    }
+                    index += 1
+                }
+                cgContext.drawPath(using: .stroke)
             }
-        }
-        cgContext.drawPath(using: .fill)
-        //------------------------------------------
-        
-        if frameIndex >= 0 {
+            
+            // draw wrists
+            cgContext.setFillColor(CGColor(red: 1, green: 0, blue: 1, alpha: 0.8))
+            addJointCirclr(cgContext: cgContext, point: transformedJoints[.leftWrist])
+            addJointCirclr(cgContext: cgContext, point: transformedJoints[.rightWrist])
+            cgContext.drawPath(using: .fill)
+            
+            // draw center wrist
+            if let wristCenterPoint = getCenterPoint(leftPoint: transformedJoints[.leftWrist], rightPoint: transformedJoints[.rightWrist]) {
+                addJointCirclr(cgContext: cgContext, point: wristCenterPoint)
+                cgContext.setFillColor(CGColor(red: 1, green: 0.5, blue: 1, alpha: 0.8))
+                cgContext.drawPath(using: .fill)
+                // draw current wrist track
+                if let lastCenterPoint = lastCenterPoint {
+                    cgContext.move(to: lastCenterPoint)
+                    cgContext.addLine(to: wristCenterPoint)
+                }
+                cgContext.drawPath(using: .stroke)
+            }
+            
             // draw frame index
-            let margin: CGFloat = 80
             let fontName = "Courier" as CFString
             let font = CTFontCreateWithName(fontName, 60, nil)
             let attributes = [NSAttributedString.Key.font: font]
-            let attributedString = NSAttributedString(string: "\(frameIndex)", attributes: attributes)
+            let attributedString = NSAttributedString(string: "\(context.writingFrame)", attributes: attributes)
             let line = CTLineCreateWithAttributedString(attributedString)
-            cgContext.textPosition = CGPoint(x: margin, y: frame.height - margin)
+            cgContext.textPosition = CGPoint(x: 80, y: frame.height-120)
+            
             CTLineDraw(line, cgContext)
         }
+        //-------------------------------------------
         cgContext.restoreGState()
+    }
+    
+    private func calculateScale(joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) -> CGFloat? {
+        if let neck = joints[.neck] {
+            if let root = joints[.root] {
+                let distanceY = abs(neck.location.y - root.location.y)
+                // we consider 0.13155192136764526 is a standard value
+                return (distanceY / 0.13155192136764526) * (frame.height / 1920)
+            }
+        }
+        return nil
+    }
+    
+    private func getCenterPoint(leftPoint: CGPoint?, rightPoint: CGPoint?) -> CGPoint? {
+        if leftPoint != nil && rightPoint != nil {
+            return CGPoint(x: (leftPoint!.x + rightPoint!.x) / 2, y: (leftPoint!.y + rightPoint!.y) / 2)
+        }
+        return nil
     }
     
     private func addJointCirclr(cgContext: CGContext, point: CGPoint?) {

@@ -25,6 +25,7 @@ class SwingAnalysisManager {
     }
     
     private func createAnalyzeContext(detectedResult: DetectedResult) -> AnalyzedContext {
+        let aspectRatio = detectedResult.size.height / detectedResult.size.width
         let locationPerPixel = (1 / detectedResult.size.width, 1 / detectedResult.size.height)
         let verticalDistance = getVerticalDistance(detectedResult: detectedResult)
         let horizontalDistance = verticalDistance * (detectedResult.size.width / detectedResult.size.height)
@@ -36,9 +37,7 @@ class SwingAnalysisManager {
         } else {
             scaled = 0
         }
-        return AnalyzedContext(locationPerPixel: locationPerPixel,
-                              scaled: scaled,
-                              detectedResult: detectedResult)
+        return AnalyzedContext(aspectRatio: aspectRatio, locationPerPixel: locationPerPixel, scaled: scaled, detectedResult: detectedResult)
     }
     
     private func getVerticalDistance(detectedResult: DetectedResult) -> CGFloat {
@@ -72,73 +71,114 @@ class SwingAnalysisManager {
     }
     
     private func analyzePoses(context: AnalyzedContext) -> [PoseSegment] {
-        var poseSegments = [PoseSegment]()
-        var lastWrist: (CGFloat?, CGFloat?)? = nil
-        var lastPose: PoseType? = nil
-        let thresholdX = context.locationPerPixel.0 * 5
-        let thresholdY = context.locationPerPixel.1 * 5
-        let joints = context.detectedResult.joints
-        for frame in 0 ... joints.count-1 {
-            print("frame: \(frame), left: \(joints[frame][.leftWrist]), right: \(joints[frame][.rightWrist])")
-            if let currentWrist = getWristLocation(joints: joints[frame]) {
-                if var lastWrist = lastWrist {
-                    let currentPose: PoseType?
-                    if currentWrist.1! - lastWrist.1! > thresholdY {
-                        if currentWrist.0! - lastWrist.0! > thresholdX {
-                            currentPose = .leftUp
-                        } else if currentWrist.0! - lastWrist.0! < -thresholdX {
-                            currentPose = .rightUp
-                        } else {
-                            currentPose = lastPose
-                        }
-                    } else if currentWrist.1! - lastWrist.1! < -thresholdY {
-                        if currentWrist.0! - lastWrist.0! > thresholdX {
-                            currentPose = .rightDown
-                        } else if currentWrist.0! - lastWrist.0! < -thresholdX {
-                            currentPose = .leftDown
-                        } else {
-                            currentPose = lastPose
-                        }
-                    } else if abs(currentWrist.0! - lastWrist.0!) < thresholdX {
-                        currentPose = .moveLess
-                    } else {
-                        currentPose = nil
-                    }
-                    var currentPoseSegment: PoseSegment? = nil
-                    if poseSegments.count > 0 {
-                        currentPoseSegment = poseSegments[poseSegments.count - 1]
-                    }
-                    if currentPose != nil && lastPose != currentPose {
-                        let start: Int
-                        if frame == 1 {
-                            start = 0
-                        } else {
-                            start = frame
-                        }
-                        poseSegments.append(PoseSegment(poseType: currentPose!, start: start, end: frame))
-                    }
-                    if currentPoseSegment != nil {
-                        currentPoseSegment!.end = frame
-                    }
-                    lastWrist = currentWrist
-                    lastPose = currentPose
-                } else {
-                    lastWrist = currentWrist
-                    lastPose = nil
-                }
-            } else {
-                lastWrist = nil
-                lastPose = nil
-            }
-        }
+        var poseSegments = analyzePreparing(context: context)
         return poseSegments
     }
     
-    private func getWristLocation(joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) -> (CGFloat?, CGFloat?)? {
-        let x = getAverage(first: joints[.leftWrist]?.location.x, second: joints[.rightWrist]?.location.x)
-        let y = getAverage(first: joints[.leftWrist]?.location.y, second: joints[.rightWrist]?.location.y)
-        if x != nil && y != nil {
-            return (x, y)
+    private func analyzePreparing(context: AnalyzedContext) ->  [PoseSegment] {
+        var result = [PoseSegment]()
+        var lowestWristLocation: CGPoint?
+        var lastWristLocation: CGPoint?
+        var poseSegment: PoseSegment?
+        let thresholdX = 0.00096 * context.scaled
+        let thresholdY = thresholdX * context.aspectRatio
+        let thresholdFrame = Int(context.detectedResult.frameRate * 0.15)
+        for index in (0 ... context.detectedResult.joints.count-1).reversed() {
+            let joints = context.detectedResult.joints[index]
+            //print("frame: \(index)")
+            if let currentWristLocation = getValidLowestWristLocation(context: context, joints: joints) {
+                if let currentRoot = joints[.root] {
+                    if currentWristLocation.y < currentRoot.location.y {
+                        var lastLocation = lowestWristLocation
+                        if lastLocation == nil {
+                            lastLocation = lastWristLocation
+                        }
+                        //print("currentWristLocation: \(currentWristLocation), lastLocation: \(lastLocation)")
+                        if let lastLocation = lastLocation {
+                            let distanceInLocationX = abs(lastLocation.x - currentWristLocation.x)
+                            let distanceInLocationY = abs(lastLocation.y - currentWristLocation.y)
+                            print("dx: \(distanceInLocationX), thresholdX: \(thresholdX), dy: \(distanceInLocationY), thresholdY: \(thresholdY)")
+                            if distanceInLocationX < thresholdX && distanceInLocationY < thresholdY {
+                                // preparing
+                                if poseSegment == nil {
+                                    poseSegment = PoseSegment(poseType: .preparing, start: index, end: index + 1)
+                                    assert(lowestWristLocation == nil)
+                                    if currentWristLocation.y <= lastWristLocation!.y {
+                                        lowestWristLocation = currentWristLocation
+                                    } else {
+                                        lowestWristLocation = lastWristLocation
+                                    }
+                                    poseSegment?.lowestFrameIndex = index
+                                    //print("create")
+                                } else {
+                                    poseSegment!.start = index
+                                    assert(lowestWristLocation != nil)
+                                    if currentWristLocation.y < lowestWristLocation!.y {
+                                        lowestWristLocation = currentWristLocation
+                                        poseSegment?.lowestFrameIndex = index
+                                    }
+                                    if index == 0 {
+                                        result.append(poseSegment!)
+                                        //print("add")
+                                    }
+                                    //print("append")
+                                }
+                            } else {
+                                //print("failed")
+                                if let poseSegment = poseSegment{
+                                    //print("keep in: \(poseSegment.end - poseSegment.start), thresholdFrame: \(thresholdFrame)")
+                                    if poseSegment.end - poseSegment.start >= thresholdFrame {
+                                        result.append(poseSegment)
+                                        //print("add")
+                                    }
+                                }
+                                poseSegment = nil
+                                lowestWristLocation = nil
+                            }
+                        }
+                    }
+                }
+                lastWristLocation = currentWristLocation
+            } else {
+                lastWristLocation = nil
+                lowestWristLocation = nil
+            }
+        }
+        return result
+    }
+    
+    private func getValidLowestWristLocation(context: AnalyzedContext, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) -> CGPoint? {
+        var leftWrist = joints[.leftWrist]
+        var rightWrist = joints[.rightWrist]
+        if leftWrist == nil && rightWrist == nil {
+            return nil
+        }
+        if leftWrist == nil {
+            leftWrist = rightWrist
+        }
+        if rightWrist == nil {
+            rightWrist = leftWrist
+        }
+        
+        guard let left = leftWrist else {
+            fatalError()
+        }
+        guard let right = rightWrist else {
+            fatalError()
+        }
+        
+        let distanceThreshold = 100 * context.scaled
+        let d = distanceInPixel(size: context.detectedResult.size, from: left, to: right)
+        print("wrist distance: \(d), threshold: \(distanceThreshold)")
+        if d < distanceThreshold {
+//            let x = getAverage(first: left.location.x, second: right.location.x)
+//            let y = getAverage(first: left.location.y, second: right.location.y)
+//            return CGPoint(x: x!, y: y!)
+            if left.location.y < right.location.y {
+                return left.location
+            } else {
+                return right.location
+            }
         }
         return nil
     }
@@ -150,6 +190,12 @@ class SwingAnalysisManager {
         let firstValue = first ?? second!
         let secondValue = second ?? first!
         return (firstValue + secondValue) / 2
+    }
+    
+    private func distanceInPixel(size: CGSize, from: VNRecognizedPoint, to: VNRecognizedPoint) -> CGFloat {
+        let px = (from.location.x - to.location.x) * size.width
+        let py = (from.location.y - to.location.y) * size.height
+        return CGFloat(sqrt(px * px + py * py))
     }
 }
 
@@ -166,11 +212,13 @@ class AnalyzedResult {
 }
 
 private class AnalyzedContext {
+    let aspectRatio: CGFloat
     let locationPerPixel: (CGFloat, CGFloat)
     let scaled: CGFloat
     let detectedResult: DetectedResult
     
-    internal init(locationPerPixel: (CGFloat, CGFloat), scaled: CGFloat, detectedResult: DetectedResult) {
+    internal init(aspectRatio: CGFloat, locationPerPixel: (CGFloat, CGFloat), scaled: CGFloat, detectedResult: DetectedResult) {
+        self.aspectRatio = aspectRatio
         self.locationPerPixel = locationPerPixel
         self.scaled = scaled
         self.detectedResult = detectedResult
@@ -178,7 +226,7 @@ private class AnalyzedContext {
 }
 
 private enum PoseType {
-    case moveLess
+    case preparing
     case leftUp
     case rightUp
     case leftDown
@@ -187,8 +235,10 @@ private enum PoseType {
 
 private class PoseSegment: CustomStringConvertible {
     let poseType: PoseType
-    let start: Int
+    var start: Int
     var end: Int
+    // only has value when postType is preparing
+    var lowestFrameIndex = -1
     
     internal init(poseType: PoseType, start: Int, end: Int) {
         self.poseType = poseType
@@ -197,6 +247,6 @@ private class PoseSegment: CustomStringConvertible {
     }
     
     var description: String {
-        return "{poseType=\(poseType), start=\(start), end=\(end)}"
+        return "{poseType=\(poseType), start=\(start), end=\(end), lowestFrameIndex=\(lowestFrameIndex)}"
     }
 }

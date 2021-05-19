@@ -30,7 +30,7 @@ class DetectedResult {
 }
 
 class PoseDetectionManager {
-    
+    private let debug = true
     static let shared = PoseDetectionManager()
     private let souceManager = SourceManager.shared
     
@@ -94,7 +94,7 @@ class PoseDetectionManager {
         return CGImagePropertyOrientation(rawValue: orientation)!
     }
     
-    func detectVideo(asset: AVURLAsset, debug: Bool = false) -> DetectedResult? {
+    func detectVideo(asset: AVURLAsset, exportSkeleton: Bool = false) -> DetectedResult? {
         guard let track = asset.tracks(withMediaType: .video).first else {
             return nil
         }
@@ -105,35 +105,36 @@ class PoseDetectionManager {
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [String(kCVPixelBufferPixelFormatTypeKey): kCVPixelFormatType_32ARGB])
         reader.add(output)
         track.accessibilityElementCount()
-        var size = CGSize(width: 0, height: 0)
+        var detectSize = CGSize(width: 0, height: 0)
         var frameJoints = Array<[VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]>()
         var frameRate: Float = 0
         var jointFrames = 0
         if reader.startReading() {
-            let natrualSize = track.naturalSize.applying(track.preferredTransform)
-            size.width = abs(natrualSize.width)
-            size.height = abs(natrualSize.height)
+            let natrualSize = track.naturalSize
+            let transformedSize = natrualSize.applying(track.preferredTransform)
+            detectSize.width = abs(transformedSize.width)
+            detectSize.height = abs(transformedSize.height)
             frameRate = track.nominalFrameRate
             let orientation = PoseDetectionManager.getTrackOrientation(track: track)
-            
+            print("orientation: \(orientation.rawValue)")
             var writer: SkeletonVideoWriter? = nil
             
-            if debug {
+            if exportSkeleton {
                 let targetName = "skeleton_\(asset.url.lastPathComponent)"
                 if var exportUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                     exportUrl.appendPathComponent(targetName, isDirectory: false)
                     souceManager.delete(sourceUrl: exportUrl)
-                    writer = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: size, frameRate: frameRate)
+                    writer = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: natrualSize, frameRate: frameRate, transform: track.preferredTransform,  orientation: orientation)
                 }
             }
-            writer?.startSessionWriting()
+            writer?.startSessionWriting(debug: debug)
             while let sampleBuffer = output.copyNextSampleBuffer() {
                 let joints = detect(sampleBuffer: sampleBuffer, orientation: orientation)
                 frameJoints.append(joints)
                 if hasJoint(joints: joints) {
                     jointFrames += 1
                 }
-                writer?.append(sampleBuffer: sampleBuffer, joints: joints, frameIndex: frameJoints.count - 1)
+                writer?.append(sampleBuffer: sampleBuffer, joints: joints)
             }
             writer?.finishWriting {
                 PHPhotoLibrary.shared().performChanges({
@@ -144,7 +145,7 @@ class PoseDetectionManager {
                 })
             }
         }
-        return DetectedResult(size: size, frameRate: frameRate, joints: frameJoints, jointFrames: jointFrames)
+        return DetectedResult(size: detectSize, frameRate: frameRate, joints: frameJoints, jointFrames: jointFrames)
     }
     
     private func hasJoint(joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) -> Bool {
@@ -157,17 +158,27 @@ class PoseDetectionManager {
     }
 }
 
+class DebugContext {
+    fileprivate(set) var writingFrame = -1
+    fileprivate(set) var writedFrameJoints = [[VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]]()
+}
+
 class SkeletonVideoWriter {
     let exportUrl: URL
-    var writingFrame = 0
+    let videoSize: (Int, Int)
+    let orientation: CGImagePropertyOrientation
     
     private let writer: AVAssetWriter
     private let input: AVAssetWriterInput
     private let skelentonRender: SkeletonRender
+
+    private var debugContext: DebugContext?
     
-    init(exportUrl: URL, videoSize: CGSize, frameRate: Float) {
+    init(exportUrl: URL, videoSize: CGSize, frameRate: Float, transform: CGAffineTransform, orientation: CGImagePropertyOrientation) {
         self.exportUrl = exportUrl
-        skelentonRender = SkeletonRender(frame: CGRect(x: 0, y: 0, width: videoSize.width, height: videoSize.height))
+        self.videoSize = (Int(videoSize.width), Int(videoSize.height))
+        self.orientation = orientation
+        skelentonRender = SkeletonRender(videoSize: videoSize, orientation: orientation)
         let compressionProperties: [String: Any] = [
             AVVideoExpectedSourceFrameRateKey: frameRate,
             AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
@@ -180,38 +191,57 @@ class SkeletonVideoWriter {
             AVVideoCompressionPropertiesKey: compressionProperties
         ]
         input = AVAssetWriterInput(mediaType: .video, outputSettings: outputSettings)
+        input.transform = transform
         writer = try! AVAssetWriter(outputURL: exportUrl, fileType: .mp4)
         writer.add(input)
     }
     
-    func startSessionWriting(atSourceTime: CMTime = CMTime.zero) {
+    func startSessionWriting(atSourceTime: CMTime = CMTime.zero, debug: Bool = false) {
         writer.startWriting()
         writer.startSession(atSourceTime: atSourceTime)
+        if debug {
+            debugContext = DebugContext()
+        }
     }
     
     func finishWriting(completionHandler: @escaping () -> Void) {
         input.markAsFinished()
         writer.finishWriting(completionHandler: completionHandler)
+        debugContext = nil
     }
     
-    func append(sampleBuffer: CMSampleBuffer, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint], frameIndex: Int = -1) {
+    func append(sampleBuffer: CMSampleBuffer, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) {
         guard let cvImageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             fatalError("create cvImageBuffer error")
         }
         CVPixelBufferLockBaseAddress(cvImageBuffer, .readOnly)
         let baseAddress = CVPixelBufferGetBaseAddress(cvImageBuffer)
+        // width: 540, height: 960, bytesPerRow: 2176; width: 1080, height: 1920, bytesPerRow: 4352; width: 1920, height: 1080, bytesPerRow: 7680
         let width = CVPixelBufferGetWidth(cvImageBuffer)
         let height = CVPixelBufferGetHeight(cvImageBuffer)
         let bitsPerComponent = 8
         let bytesPerRow = CVPixelBufferGetBytesPerRow(cvImageBuffer)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue
+    
         guard let cgContext = CGContext(data: baseAddress, width: width, height: height, bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: bitmapInfo) else {
             fatalError("create cgContext error")
         }
         CVPixelBufferUnlockBaseAddress(cvImageBuffer, .readOnly)
-        skelentonRender.render(in: cgContext, joints: joints, frameIndex: frameIndex)
-        input.append(sampleBuffer)
-        writingFrame += 1
+        debugContext?.writingFrame += 1
+        skelentonRender.render(in: cgContext, joints: joints, debugContext: debugContext)
+        debugContext?.writedFrameJoints.append(joints)
+        var count = 0
+        while(true) {
+            if input.isReadyForMoreMediaData {
+                input.append(sampleBuffer)
+                break
+            }
+            count += 1
+            if count == 10 {
+                break
+            }
+            Thread.sleep(forTimeInterval: 1)
+        }
     }
 }

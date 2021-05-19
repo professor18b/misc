@@ -121,7 +121,7 @@ class JointSegmentView: UIView {
     }
     
     private func updatePathLayer(joints: [VNHumanBodyPoseObservation.JointName: VNRecognizedPoint]) {
-        let flipVertical =  CGAffineTransform.verticalFlip
+        let flipVertical = CGAffineTransform.verticalFlip
         let scaleToBounds = CGAffineTransform(scaleX: bounds.width, y: bounds.height)
         var scaledJoints: [VNHumanBodyPoseObservation.JointName: CGPoint] = [:]
         // add all joints
