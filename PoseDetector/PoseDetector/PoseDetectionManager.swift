@@ -10,10 +10,15 @@ import AVFoundation
 import Photos
 import UIKit
 
+struct DetectedPoint {
+    let location: CGPoint
+    let confidence: Float
+}
+
 class DetectedResult {
     let size: CGSize
     let frameRate: Float
-    let joints: Array<[VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]>
+    let joints: [[String : DetectedPoint]]
     let jointFrames: Int
     var frames: Int {
         get {
@@ -21,7 +26,7 @@ class DetectedResult {
         }
     }
     
-    internal init(size: CGSize, frameRate: Float, joints: Array<[VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]>, jointFrames: Int) {
+    internal init(size: CGSize, frameRate: Float, joints: [[String : DetectedPoint]], jointFrames: Int) {
         self.size = size
         self.frameRate = frameRate
         self.joints = joints
@@ -39,19 +44,19 @@ class PoseDetectionManager {
     
     static let outputSettings = [String(kCVPixelBufferPixelFormatTypeKey): kCVPixelFormatType_420YpCbCr8BiPlanarFullRange]
     
-    func detect(cgImage: CGImage, orientation: CGImagePropertyOrientation)  -> [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint] {
+    func detect(cgImage: CGImage, orientation: CGImagePropertyOrientation)  -> [String : DetectedPoint] {
         let visionHandler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
         return doDetectRequest(visionHandler: visionHandler)
     }
     
-    func detect(sampleBuffer: CMSampleBuffer, orientation: CGImagePropertyOrientation) -> [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint] {
+    func detect(sampleBuffer: CMSampleBuffer, orientation: CGImagePropertyOrientation) -> [String : DetectedPoint] {
         let visionHandler = VNImageRequestHandler(cmSampleBuffer: sampleBuffer, orientation: orientation, options: [:])
         return doDetectRequest(visionHandler: visionHandler)
     }
     
-    private func doDetectRequest(visionHandler: VNImageRequestHandler) -> [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint] {
+    private func doDetectRequest(visionHandler: VNImageRequestHandler) -> [String : DetectedPoint] {
 //        print("doDetectRequest: \(Thread.current)")
-        var joints = [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]()
+        var joints = [String : DetectedPoint]()
         do {
             try visionHandler.perform([detectPoseRequest])
             if let observation = detectPoseRequest.results?.first {
@@ -67,7 +72,7 @@ class PoseDetectionManager {
                     guard point.confidence > 0.1 else {
                         continue
                     }
-                    joints[key] = point
+                    joints[key.keyName] = DetectedPoint(location: point.location, confidence: point.confidence)
                 }
             }
         } catch {
@@ -106,7 +111,7 @@ class PoseDetectionManager {
         reader.add(output)
         track.accessibilityElementCount()
         var detectSize = CGSize(width: 0, height: 0)
-        var frameJoints = Array<[VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]>()
+        var frameJoints = [[String : DetectedPoint]]()
         var frameRate: Float = 0
         var jointFrames = 0
         if reader.startReading() {
@@ -148,9 +153,9 @@ class PoseDetectionManager {
         return DetectedResult(size: detectSize, frameRate: frameRate, joints: frameJoints, jointFrames: jointFrames)
     }
     
-    private func hasJoint(joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) -> Bool {
+    private func hasJoint(joints: [String : DetectedPoint]) -> Bool {
         for entry in joints {
-            if entry.key.rawValue.rawValue.count > 0 {
+            if entry.key.count > 0 {
                 return true
             }
         }
@@ -160,7 +165,7 @@ class PoseDetectionManager {
 
 class DebugContext {
     fileprivate(set) var writingFrame = -1
-    fileprivate(set) var writedFrameJoints = [[VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]]()
+    fileprivate(set) var writedFrameJoints = [[String: DetectedPoint]]()
 }
 
 class SkeletonVideoWriter {
@@ -210,7 +215,7 @@ class SkeletonVideoWriter {
         debugContext = nil
     }
     
-    func append(sampleBuffer: CMSampleBuffer, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) {
+    func append(sampleBuffer: CMSampleBuffer, joints: [String : DetectedPoint]) {
         guard let cvImageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             fatalError("create cvImageBuffer error")
         }

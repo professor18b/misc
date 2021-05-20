@@ -70,7 +70,6 @@ class SkeletonRender {
     let frame: CGRect
     let orientation: CGImagePropertyOrientation
     
-    
     private var scaled: CGFloat?
     private var jointRadius: CGFloat = 0
     private var jointDiameter: CGFloat = 0
@@ -93,20 +92,18 @@ class SkeletonRender {
         }
         
         scalingTransform = CGAffineTransform(scaleX: frame.width, y: frame.height)
-        print("skeletonRender, frame: \(frame), orientation: \(orientation.rawValue), scalingTransform: \(scalingTransform)")
     }
     
-    func render(in cgContext: CGContext, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint], debugContext: DebugContext? = nil) {
+    func render(in cgContext: CGContext, joints: [String: DetectedPoint], debugContext: DebugContext? = nil) {
         // calculate scale
-        if scaled == nil {
-            scaled = calculateScale(joints: joints)
-            if let scaled = scaled {
-                jointRadius = 9 * scaled
-                jointDiameter = jointRadius * 2
-            }
+        scaled = calculateScale(joints: joints)
+        if let scaled = scaled {
+            jointRadius = 9 * scaled
+            jointDiameter = jointRadius * 2
         }
+        
         // transform points
-        var transformedJoints: [VNHumanBodyPoseObservation.JointName: CGPoint] = [:]
+        var transformedJoints: [String: CGPoint] = [:]
         for entry in joints {
             let point = entry.value.location.applying(scalingTransform)
             transformedJoints[entry.key] = point
@@ -130,8 +127,8 @@ class SkeletonRender {
             while index < segments.count - 1 {
                 let start = segments[index]
                 let end = segments[index + 1]
-                if let startPoint = transformedJoints[start] {
-                    if let endPoint = transformedJoints[end] {
+                if let startPoint = transformedJoints[start.keyName] {
+                    if let endPoint = transformedJoints[end.keyName] {
                         cgContext.move(to: startPoint)
                         cgContext.addLine(to: endPoint)
                     }
@@ -156,12 +153,12 @@ class SkeletonRender {
                 index = 0
                 while index < context.writedFrameJoints.count - 1 {
                     let start = context.writedFrameJoints[index]
-                    let startLeftPoint =  start[.leftWrist]?.location.applying(scalingTransform)
-                    let startRightPoint =  start[.rightWrist]?.location.applying(scalingTransform)
+                    let startLeftPoint =  start[VNHumanBodyPoseObservation.JointName.leftWrist.keyName]?.location.applying(scalingTransform)
+                    let startRightPoint =  start[VNHumanBodyPoseObservation.JointName.rightWrist.keyName]?.location.applying(scalingTransform)
                     let startCenter = getCenterPoint(leftPoint: startLeftPoint, rightPoint: startRightPoint)
                     let end = context.writedFrameJoints[index + 1]
-                    let endLeftPoint =  end[.leftWrist]?.location.applying(scalingTransform)
-                    let endRightPoint =  end[.rightWrist]?.location.applying(scalingTransform)
+                    let endLeftPoint =  end[VNHumanBodyPoseObservation.JointName.leftWrist.keyName]?.location.applying(scalingTransform)
+                    let endRightPoint =  end[VNHumanBodyPoseObservation.JointName.rightWrist.keyName]?.location.applying(scalingTransform)
                     let endCenter = getCenterPoint(leftPoint: endLeftPoint, rightPoint: endRightPoint)
                     if startCenter != nil && endCenter != nil {
                         cgContext.move(to: startCenter!)
@@ -175,12 +172,15 @@ class SkeletonRender {
             
             // draw wrists
             cgContext.setFillColor(CGColor(red: 1, green: 0, blue: 1, alpha: 0.8))
-            addJointCirclr(cgContext: cgContext, point: transformedJoints[.leftWrist])
-            addJointCirclr(cgContext: cgContext, point: transformedJoints[.rightWrist])
+            addJointCirclr(cgContext: cgContext, point: transformedJoints[VNHumanBodyPoseObservation.JointName.leftWrist.keyName])
+            addJointCirclr(cgContext: cgContext, point: transformedJoints[VNHumanBodyPoseObservation.JointName.rightWrist.keyName])
             cgContext.drawPath(using: .fill)
             
             // draw center wrist
-            if let wristCenterPoint = getCenterPoint(leftPoint: transformedJoints[.leftWrist], rightPoint: transformedJoints[.rightWrist]) {
+            if let wristCenterPoint = getCenterPoint(
+                leftPoint: transformedJoints[VNHumanBodyPoseObservation.JointName.leftWrist.keyName],
+                rightPoint: transformedJoints[VNHumanBodyPoseObservation.JointName.rightWrist.keyName]
+            ) {
                 addJointCirclr(cgContext: cgContext, point: wristCenterPoint)
                 cgContext.setFillColor(CGColor(red: 1, green: 0.5, blue: 1, alpha: 0.8))
                 cgContext.drawPath(using: .fill)
@@ -198,7 +198,7 @@ class SkeletonRender {
             let attributes = [NSAttributedString.Key.font: font]
             let attributedString = NSAttributedString(string: "\(context.writingFrame)", attributes: attributes)
             let line = CTLineCreateWithAttributedString(attributedString)
-            cgContext.textPosition = CGPoint(x: 80, y: frame.height-120)
+            cgContext.textPosition = CGPoint(x: 80, y: frame.height - 120)
             
             CTLineDraw(line, cgContext)
         }
@@ -206,9 +206,9 @@ class SkeletonRender {
         cgContext.restoreGState()
     }
     
-    private func calculateScale(joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) -> CGFloat? {
-        if let neck = joints[.neck] {
-            if let root = joints[.root] {
+    private func calculateScale(joints: [String: DetectedPoint]) -> CGFloat? {
+        if let neck = joints[VNHumanBodyPoseObservation.JointName.neck.keyName] {
+            if let root = joints[VNHumanBodyPoseObservation.JointName.root.keyName] {
                 let distanceY = abs(neck.location.y - root.location.y)
                 // we consider 0.13155192136764526 is a standard value
                 return (distanceY / 0.13155192136764526) * (frame.height / 1920)

@@ -120,10 +120,10 @@ class JointSegmentView: UIView {
         }
     }
     
-    private func updatePathLayer(joints: [VNHumanBodyPoseObservation.JointName: VNRecognizedPoint]) {
+    private func updatePathLayer(joints: [String: DetectedPoint]) {
         let flipVertical = CGAffineTransform.verticalFlip
         let scaleToBounds = CGAffineTransform(scaleX: bounds.width, y: bounds.height)
-        var scaledJoints: [VNHumanBodyPoseObservation.JointName: CGPoint] = [:]
+        var scaledJoints: [String: CGPoint] = [:]
         // add all joints
         jointPath.removeAllPoints()
         for entry in joints {
@@ -139,7 +139,7 @@ class JointSegmentView: UIView {
         for segments in allSegments {
             firstJonit = true
             for joint in segments {
-                if let jointScaled = scaledJoints[joint] {
+                if let jointScaled = scaledJoints[joint.keyName] {
                     if firstJonit {
                         jointSegmentPath.move(to: jointScaled)
                         firstJonit = false

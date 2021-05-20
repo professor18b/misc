@@ -37,6 +37,7 @@ class SwingAnalysisManager {
         } else {
             scaled = 0
         }
+        print("detectedSize: \(detectedResult.size), scaled: \(scaled)")
         return AnalyzedContext(aspectRatio: aspectRatio, locationPerPixel: locationPerPixel, scaled: scaled, detectedResult: detectedResult)
     }
     
@@ -44,8 +45,8 @@ class SwingAnalysisManager {
         var lastMaxEyeInY: CGFloat = 0
         var lastMinAnkleInY: CGFloat = 1
         for joints in detectedResult.joints {
-            let leftEyeY = joints[.leftEye]?.location.y ?? 0
-            let rightEyeY = joints[.rightEye]?.location.y ?? 0
+            let leftEyeY = joints[VNHumanBodyPoseObservation.JointName.leftEye.keyName]?.location.y ?? 0
+            let rightEyeY = joints[VNHumanBodyPoseObservation.JointName.rightEye.keyName]?.location.y ?? 0
             let max = fmax(leftEyeY, rightEyeY)
             if max > lastMaxEyeInY {
                 lastMaxEyeInY = max
@@ -53,8 +54,8 @@ class SwingAnalysisManager {
 //            print("leftEye: \(leftEyeY)), rightEye: \(rightEyeY)")
 //            print("leftEye: \(leftEyeY*detectedResult.size.height), rightEye: \(rightEyeY*detectedResult.size.height)")
             
-            let leftAnkleY = joints[.leftAnkle]?.location.y ?? 0
-            let rightAnkleY = joints[.rightAnkle]?.location.y ?? 0
+            let leftAnkleY = joints[VNHumanBodyPoseObservation.JointName.leftAnkle.keyName]?.location.y ?? 1
+            let rightAnkleY = joints[VNHumanBodyPoseObservation.JointName.rightAnkle.keyName]?.location.y ?? 1
             let min = fmin(leftAnkleY, rightAnkleY)
             if min < lastMinAnkleInY {
                 lastMinAnkleInY = min
@@ -83,17 +84,17 @@ class SwingAnalysisManager {
         let thresholdX = 0.00096 * context.scaled
         let thresholdY = thresholdX * context.aspectRatio
         let thresholdFrame = Int(context.detectedResult.frameRate * 0.15)
-        for index in (0 ... context.detectedResult.joints.count-1).reversed() {
+        for index in (0 ... context.detectedResult.joints.count - 1).reversed() {
             let joints = context.detectedResult.joints[index]
-            //print("frame: \(index)")
+            print("frame: \(index)")
             if let currentWristLocation = getValidLowestWristLocation(context: context, joints: joints) {
-                if let currentRoot = joints[.root] {
+                if let currentRoot = joints[VNHumanBodyPoseObservation.JointName.root.keyName] {
                     if currentWristLocation.y < currentRoot.location.y {
                         var lastLocation = lowestWristLocation
                         if lastLocation == nil {
                             lastLocation = lastWristLocation
                         }
-                        //print("currentWristLocation: \(currentWristLocation), lastLocation: \(lastLocation)")
+                        print("currentWristLocation: \(currentWristLocation), lastLocation: \(lastLocation)")
                         if let lastLocation = lastLocation {
                             let distanceInLocationX = abs(lastLocation.x - currentWristLocation.x)
                             let distanceInLocationY = abs(lastLocation.y - currentWristLocation.y)
@@ -109,7 +110,7 @@ class SwingAnalysisManager {
                                         lowestWristLocation = lastWristLocation
                                     }
                                     poseSegment?.lowestFrameIndex = index
-                                    //print("create")
+                                    print("create")
                                 } else {
                                     poseSegment!.start = index
                                     assert(lowestWristLocation != nil)
@@ -119,17 +120,17 @@ class SwingAnalysisManager {
                                     }
                                     if index == 0 {
                                         result.append(poseSegment!)
-                                        //print("add")
+                                        print("add")
                                     }
-                                    //print("append")
+                                    print("append")
                                 }
                             } else {
-                                //print("failed")
+                                print("failed")
                                 if let poseSegment = poseSegment{
-                                    //print("keep in: \(poseSegment.end - poseSegment.start), thresholdFrame: \(thresholdFrame)")
+                                    print("keep in: \(poseSegment.end - poseSegment.start), thresholdFrame: \(thresholdFrame)")
                                     if poseSegment.end - poseSegment.start >= thresholdFrame {
                                         result.append(poseSegment)
-                                        //print("add")
+                                        print("add")
                                     }
                                 }
                                 poseSegment = nil
@@ -147,9 +148,9 @@ class SwingAnalysisManager {
         return result
     }
     
-    private func getValidLowestWristLocation(context: AnalyzedContext, joints: [VNHumanBodyPoseObservation.JointName : VNRecognizedPoint]) -> CGPoint? {
-        var leftWrist = joints[.leftWrist]
-        var rightWrist = joints[.rightWrist]
+    private func getValidLowestWristLocation(context: AnalyzedContext, joints: [String: DetectedPoint]) -> CGPoint? {
+        var leftWrist = joints[VNHumanBodyPoseObservation.JointName.leftWrist.keyName]
+        var rightWrist = joints[VNHumanBodyPoseObservation.JointName.rightWrist.keyName]
         if leftWrist == nil && rightWrist == nil {
             return nil
         }
@@ -192,7 +193,7 @@ class SwingAnalysisManager {
         return (firstValue + secondValue) / 2
     }
     
-    private func distanceInPixel(size: CGSize, from: VNRecognizedPoint, to: VNRecognizedPoint) -> CGFloat {
+    private func distanceInPixel(size: CGSize, from: DetectedPoint, to: DetectedPoint) -> CGFloat {
         let px = (from.location.x - to.location.x) * size.width
         let py = (from.location.y - to.location.y) * size.height
         return CGFloat(sqrt(px * px + py * py))

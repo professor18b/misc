@@ -8,6 +8,12 @@
 import UIKit
 import Vision
 
+extension VNHumanBodyPoseObservation.JointName {
+    var keyName: String {
+        return rawValue.rawValue
+    }
+}
+
 extension Date {
     
     static func defaultFormatter() -> DateFormatter {
