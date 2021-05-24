@@ -23,7 +23,7 @@ class PoseDetectorTests: XCTestCase {
 
     func testExample() throws {
         let bundle = Bundle(for: type(of: self))
-        guard let path = bundle.path(forResource: "testData", ofType: ".txt") else {
+        guard let path = bundle.path(forResource: "testData_standard", ofType: ".txt") else {
             XCTFail("test data not found")
             return
         }
@@ -78,7 +78,6 @@ class PoseDetectorTests: XCTestCase {
         let detectedResult = DetectedResult(size: size, frameRate: frameRate, joints: frameJoints, jointFrames: jointFrame)
         print("size: \(detectedResult.size), frameRate: \(frameRate), jointFrames: \(jointFrame), jointsCount: \(frameJoints.count) \n")
         let result = analysisManager.getAnalyzedResult(detectedResult: detectedResult)
-        print(result)
         // This is an example of a functional test case.
         // Use XCTAssert and related functions to verify your tests produce the correct results.
     }

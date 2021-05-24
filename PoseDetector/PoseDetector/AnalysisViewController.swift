@@ -36,20 +36,20 @@ class AnalysisViewController: BaseViewController {
                 }
                 return
             }
-            print("--------------------------")
-            var count = 0
-            print("size:\(detectedResult.size)")
-            print("frameRate:\(detectedResult.frameRate)")
-            print("jointFrames:\(detectedResult.jointFrames)")
-            for element in detectedResult.joints {
-                print("{")
-                for entry in element {
-                    print("\(entry.key)|\(entry.value.location)")
-                }
-                print("}")
-                count += 1
-            }
-            print("--------------------------")
+//            print("--------------------------")
+//            var count = 0
+//            print("size:\(detectedResult.size)")
+//            print("frameRate:\(detectedResult.frameRate)")
+//            print("jointFrames:\(detectedResult.jointFrames)")
+//            for element in detectedResult.joints {
+//                print("{")
+//                for entry in element {
+//                    print("\(entry.key)|\(entry.value.location)")
+//                }
+//                print("}")
+//                count += 1
+//            }
+//            print("--------------------------")
             let analyzedResult = self.analysisManager.getAnalyzedResult(detectedResult: detectedResult)
             DispatchQueue.main.async {
                 self.descText.text = "frames: \(detectedResult.frames), jointFrames: \(detectedResult.jointFrames), frameRate: \(detectedResult.frameRate)\nscaled: \(analyzedResult.scaled)"
