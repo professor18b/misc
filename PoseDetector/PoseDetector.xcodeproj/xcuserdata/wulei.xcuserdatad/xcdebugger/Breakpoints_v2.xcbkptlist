@@ -3,4 +3,23 @@
    uuid = "983FD1C4-DFEB-42DF-BFE1-8E3D16B8BBF1"
    type = "1"
    version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "346A10DE-C76E-41F2-A4EE-1DE5341D4F75"
+            shouldBeEnabled = "Yes"
+            condition = "index == 872"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "PoseDetector/SwingAnalysisManager.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "351"
+            endingLineNumber = "351"
+            landmarkName = "analyzeUp(context:preparingSegments:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
 </Bucket>

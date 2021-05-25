@@ -15,6 +15,8 @@
 		3A3F044826579D5D000E2EF8 /* testData_golf_nj.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044626579D5D000E2EF8 /* testData_golf_nj.txt */; };
 		3A3F044926579D5D000E2EF8 /* testData_wl_long.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044726579D5D000E2EF8 /* testData_wl_long.txt */; };
 		3A3F044B265B6F2F000E2EF8 /* testData_standard.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044A265B6F2F000E2EF8 /* testData_standard.txt */; };
+		3A3F044D265CA6E9000E2EF8 /* testData_1.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044C265CA6E9000E2EF8 /* testData_1.txt */; };
+		3A3F044F265CC2D2000E2EF8 /* testData_wl_long2.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044E265CC2D2000E2EF8 /* testData_wl_long2.txt */; };
 		3A92EB2126326F28001878E8 /* VideoPlayerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A92EB2026326F28001878E8 /* VideoPlayerViewController.swift */; };
 		3A92EB362632A683001878E8 /* BaseViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A92EB352632A683001878E8 /* BaseViewController.swift */; };
 		3A92EB5426355AFB001878E8 /* ImageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A92EB5326355AFB001878E8 /* ImageViewController.swift */; };
@@ -65,6 +67,8 @@
 		3A3F044626579D5D000E2EF8 /* testData_golf_nj.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_golf_nj.txt; sourceTree = "<group>"; };
 		3A3F044726579D5D000E2EF8 /* testData_wl_long.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_wl_long.txt; sourceTree = "<group>"; };
 		3A3F044A265B6F2F000E2EF8 /* testData_standard.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_standard.txt; sourceTree = "<group>"; };
+		3A3F044C265CA6E9000E2EF8 /* testData_1.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_1.txt; sourceTree = "<group>"; };
+		3A3F044E265CC2D2000E2EF8 /* testData_wl_long2.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_wl_long2.txt; sourceTree = "<group>"; };
 		3A92EB2026326F28001878E8 /* VideoPlayerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerViewController.swift; sourceTree = "<group>"; };
 		3A92EB352632A683001878E8 /* BaseViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseViewController.swift; sourceTree = "<group>"; };
 		3A92EB5326355AFB001878E8 /* ImageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewController.swift; sourceTree = "<group>"; };
@@ -192,6 +196,8 @@
 		3AAFFFBC261313D0008C1389 /* PoseDetectorTests */ = {
 			isa = PBXGroup;
 			children = (
+				3A3F044E265CC2D2000E2EF8 /* testData_wl_long2.txt */,
+				3A3F044C265CA6E9000E2EF8 /* testData_1.txt */,
 				3A3F044A265B6F2F000E2EF8 /* testData_standard.txt */,
 				3A3F044626579D5D000E2EF8 /* testData_golf_nj.txt */,
 				3A3F044726579D5D000E2EF8 /* testData_wl_long.txt */,
@@ -324,7 +330,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				3A3F044B265B6F2F000E2EF8 /* testData_standard.txt in Resources */,
+				3A3F044F265CC2D2000E2EF8 /* testData_wl_long2.txt in Resources */,
 				3A3F044826579D5D000E2EF8 /* testData_golf_nj.txt in Resources */,
+				3A3F044D265CA6E9000E2EF8 /* testData_1.txt in Resources */,
 				3A3F044926579D5D000E2EF8 /* testData_wl_long.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
