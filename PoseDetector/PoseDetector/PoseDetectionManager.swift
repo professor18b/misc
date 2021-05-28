@@ -121,7 +121,10 @@ class PoseDetectionManager {
             detectSize.height = abs(transformedSize.height)
             frameRate = track.nominalFrameRate
             let orientation = PoseDetectionManager.getTrackOrientation(track: track)
-            print("orientation: \(orientation.rawValue)")
+            let dataRate = track.estimatedDataRate
+            print("start detect, duration:\(CMTimeGetSeconds(asset.duration)), dataRate: \(dataRate/(1024*1024)) Mbits/s, frameRate: \(frameRate), orientation: \(orientation.rawValue),")
+            let processInfo = ProcessInfo()
+            let startUpTime = processInfo.systemUptime
             var writer: SkeletonVideoWriter? = nil
             
             if exportSkeleton {
@@ -129,11 +132,12 @@ class PoseDetectionManager {
                 if var exportUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                     exportUrl.appendPathComponent(targetName, isDirectory: false)
                     souceManager.delete(sourceUrl: exportUrl)
-                    writer = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: natrualSize, frameRate: frameRate, transform: track.preferredTransform,  orientation: orientation)
+                    writer = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: natrualSize, dataRate: dataRate, frameRate: frameRate, transform: track.preferredTransform,  orientation: orientation)
                 }
             }
             writer?.startSessionWriting(debug: debug)
             while let sampleBuffer = output.copyNextSampleBuffer() {
+                print(".", terminator: "")
                 let joints = detect(sampleBuffer: sampleBuffer, orientation: orientation)
                 frameJoints.append(joints)
                 if hasJoint(joints: joints) {
@@ -141,14 +145,17 @@ class PoseDetectionManager {
                 }
                 writer?.append(sampleBuffer: sampleBuffer, joints: joints)
             }
+            print("")
             writer?.finishWriting {
+                print("finish writing")
                 PHPhotoLibrary.shared().performChanges({
                     PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: writer!.exportUrl)
                 }, completionHandler:{ success, error in
-                    print("save photo library finished. success: \(success), error: \(error ?? "")")
+                    print("saved to photo library, success: \(success), error: \(error ?? "")")
                     self.souceManager.delete(sourceUrl: writer!.exportUrl)
                 })
             }
+            print("finish detect, costs: \(processInfo.systemUptime - startUpTime)")
         }
         return DetectedResult(size: detectSize, frameRate: frameRate, joints: frameJoints, jointFrames: jointFrames)
     }
@@ -179,12 +186,13 @@ class SkeletonVideoWriter {
 
     private var debugContext: DebugContext?
     
-    init(exportUrl: URL, videoSize: CGSize, frameRate: Float, transform: CGAffineTransform, orientation: CGImagePropertyOrientation) {
+    init(exportUrl: URL, videoSize: CGSize, dataRate: Float, frameRate: Float, transform: CGAffineTransform, orientation: CGImagePropertyOrientation) {
         self.exportUrl = exportUrl
         self.videoSize = (Int(videoSize.width), Int(videoSize.height))
         self.orientation = orientation
         skelentonRender = SkeletonRender(videoSize: videoSize, orientation: orientation)
         let compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: SkeletonVideoWriter.getCompressBitRate(videoSize: videoSize, dataRate: dataRate),
             AVVideoExpectedSourceFrameRateKey: frameRate,
             AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
         ]
@@ -199,6 +207,28 @@ class SkeletonVideoWriter {
         input.transform = transform
         writer = try! AVAssetWriter(outputURL: exportUrl, fileType: .mp4)
         writer.add(input)
+    }
+    
+    private static func getCompressBitRate(videoSize: CGSize, dataRate: Float) -> Float {
+        let kbps: Float
+        if videoSize.width >= 1920 {
+            kbps = 4992
+        } else if videoSize.width >= 1280 {
+            kbps = 2496
+        } else if videoSize.width >= 1024 {
+            kbps = 1856
+        } else {
+            kbps = 1216
+        }
+        let compress: Float = kbps * 1024
+        if dataRate < compress {
+            return dataRate
+        }
+        return compress
+    }
+    
+    private func getAudioBitRate(videoSize: CGSize) -> Int {
+        return 64 * 1024
     }
     
     func startSessionWriting(atSourceTime: CMTime = CMTime.zero, debug: Bool = false) {

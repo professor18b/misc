@@ -30,7 +30,7 @@ class AnalysisViewController: BaseViewController {
     
     override func viewDidLoad() {
         DispatchQueue.global().async {
-            guard let detectedResult = self.detectionManager.detectVideo(asset: self.videoSource, exportSkeleton: true) else {
+            guard let detectedResult = self.detectionManager.detectVideo(asset: self.videoSource, exportSkeleton: false) else {
                 DispatchQueue.main.async {
                     self.descText.text = "no result"
                 }
