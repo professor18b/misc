@@ -16,11 +16,13 @@ class SwingAnalysisManager {
     
     func getAnalyzedResult(detectedResult: DetectedResult) -> AnalyzedResult {
         let context = createAnalyzeContext(detectedResult: detectedResult)
-        var keyFrames = [[-1,-1,-1], [-1,-1,-1], [-1,-1,-1]]
+        let poseSegments: [PoseSegment]
         if context.scaled > 0 {
-            let poseSegments = analyzePoses(context: context)
+            poseSegments = analyzePoses(context: context)
+        } else {
+            poseSegments = [PoseSegment]()
         }
-        return AnalyzedResult(scaled: context.scaled, detectedResult: detectedResult, keyFrames: keyFrames)
+        return AnalyzedResult(scaled: context.scaled, detectedResult: detectedResult, poseSegments: poseSegments)
     }
     
     private func createAnalyzeContext(detectedResult: DetectedResult) -> AnalyzedContext {
@@ -91,7 +93,7 @@ class SwingAnalysisManager {
         for segment in result {
             print(segment)
         }
-        return result
+        return result.reversed()
     }
     
     private func printEndDebugInfo(_ message: Any) {
@@ -114,7 +116,7 @@ class SwingAnalysisManager {
         var result = [PoseSegment]()
         var lastWristLocation: CGPoint?
         var poseSegment: PoseSegment?
-        let maxEndFrameCount = Int(context.detectedResult.frameRate * 1)
+        let maxEndFrameCount = Int(context.detectedResult.frameRate * 0.6)
         let minFrameCount = Int(context.detectedResult.frameRate * 0.15)
         let maxFrameCount = Int(context.detectedResult.frameRate * 1.5)
         let maxDistanceInY = 0.07 * context.scaled
@@ -128,7 +130,7 @@ class SwingAnalysisManager {
                 printEndDebugInfo("frame: \(index)")
                 if let currentWristLocation = getValidLowestWristLocation(context: context, joints: joints) {
                     if let lastLocation = lastWristLocation {
-                        if currentWristLocation.y - lastLocation.y < 0 {
+                        if currentWristLocation.y - lastLocation.y < 0 && isHighestLocationInFuture(context: context, index: index, toCompared: currentWristLocation) {
                             if poseSegment == nil {
                                 break
                             }
@@ -148,7 +150,7 @@ class SwingAnalysisManager {
                         } else {
                             if poseSegment == nil {
                                 poseSegment = PoseSegment(poseType: PoseType.end, standType: hitSegment.standType, start: hitSegment.end + 1, end: index)
-                                printEndDebugInfo("create, start: \(poseSegment!.start), end: \(poseSegment!.end)")
+                                printEndDebugInfo("end create, start: \(poseSegment!.start), end: \(poseSegment!.end)")
                             } else {
                                 if endFrameCount > 0 {
                                     endFrameCount += 1
@@ -163,6 +165,7 @@ class SwingAnalysisManager {
                             if poseSegment != nil {
                                 if poseSegment!.endHighestLocation == nil || currentWristLocation.y > poseSegment!.endHighestLocation!.y{
                                     poseSegment!.endHighestLocation = currentWristLocation
+                                    poseSegment!.endHighestIndex = index
                                 }
                             }
                         }
@@ -177,6 +180,8 @@ class SwingAnalysisManager {
                     && poseSegment!.endHighestLocation!.y > getLowestShoulderY(context: context, joints: context.detectedResult.joints[poseSegment!.end]) {
                     hitSegment.next = poseSegment
                     result.append(preparingSegment)
+                } else {
+                    printEndDebugInfo("end append failed: minFrameCount: \(minFrameCount), maxFrameCount: \(maxFrameCount)")
                 }
                 poseSegment = nil
             }
@@ -291,15 +296,10 @@ class SwingAnalysisManager {
         var poseSegment: PoseSegment?
         let maxStartFrameCount = Int(context.detectedResult.frameRate * 0.5)
         let minFrameCount = Int(context.detectedResult.frameRate * 0.3)
-        let maxFrameCount = Int(context.detectedResult.frameRate * 2.2)
+        let maxFrameCount = Int(context.detectedResult.frameRate * 2.5)
         let maxDistanceYForOverShoulder = 0.003 * context.scaled
+        let maxDistanceYForBelowRoot = 0.106 * context.scaled
         for preparingSegment in preparingSegments {
-            let maxDistanceInYForBelowRoot: CGFloat
-            if preparingSegment.standType == .faceOn {
-                maxDistanceInYForBelowRoot = 0.003 * context.scaled
-            } else {
-                maxDistanceInYForBelowRoot = 0.106 * context.scaled
-            }
             let minY = preparingSegment.preparingLowestLocation!.y - 0.015
             lastWristLocation = nil
             lastWristHorizontalDirection = nil
@@ -313,7 +313,7 @@ class SwingAnalysisManager {
                         if currentWristLocation.y < minY {
                             printUpDebugInfo("up too low then break: \(preparingSegment.preparingLowestLocation!.y - currentWristLocation.y)")
                             break
-                        } else if currentWristLocation.y - lastLocation.y < 0 {
+                        } else if currentWristLocation.y - lastLocation.y < 0 && isHighestLocationInFuture(context: context, index: index, toCompared: currentWristLocation) {
                             let overShoulder = currentWristLocation.y > getLowestShoulderY(context: context, joints: context.detectedResult.joints[index])
                             let belowRoot = currentWristLocation.y < getRootY(context: context, joints: context.detectedResult.joints[index])
                             if !overShoulder && !belowRoot {
@@ -329,7 +329,7 @@ class SwingAnalysisManager {
                             let maxDistanceInY: CGFloat
                             if belowRoot {
                                 distanceInLocationY = abs(lastLocation.y - currentWristLocation.y)
-                                maxDistanceInY = maxDistanceInYForBelowRoot
+                                maxDistanceInY = maxDistanceYForBelowRoot
                             } else if poseSegment != nil {
                                 distanceInLocationY = abs(poseSegment!.upHighestLocation!.y - currentWristLocation.y)
                                 maxDistanceInY = maxDistanceYForOverShoulder
@@ -339,12 +339,8 @@ class SwingAnalysisManager {
                             }
                                 
                             if distanceInLocationY > maxDistanceInY {
-                                // check next frame to avoid unstability of detection
-                                let nextFrameDirection = getValidFrameDirection(context: context, index: index + 1, toCompared: currentWristLocation)
-                                if nextFrameDirection == nil || nextFrameDirection! > 0 {
-                                    printUpDebugInfo("up move down then break, belowRoot: \(belowRoot), overShoulder: \(overShoulder), distanceInLocationY: \(distanceInLocationY), maxDistanceInY:\(maxDistanceInY)")
-                                    break
-                                }
+                                printUpDebugInfo("up move down then break, belowRoot: \(belowRoot), overShoulder: \(overShoulder), distanceInLocationY: \(distanceInLocationY), maxDistanceInY:\(maxDistanceInY)")
+                                break
                             }
                             
                             if overShoulder {
@@ -395,13 +391,42 @@ class SwingAnalysisManager {
         return result
     }
     
-    private func getValidFrameDirection(context: AnalyzedContext, index: Int, toCompared: CGPoint) -> CGFloat? {
-        if index < context.detectedResult.joints.count {
-            if let wristLocation = getValidLowestWristLocation(context: context, joints: context.detectedResult.joints[index]) {
-                return toCompared.y - wristLocation.y
+    private func isHighestLocationInFuture(context: AnalyzedContext, index: Int, toCompared: CGPoint) -> Bool {
+        return isHighestOrLowestLocationInFuture(context: context, index: index, toCompared: toCompared)
+    }
+    
+    private func isLowestLocationInFuture(context: AnalyzedContext, index: Int, toCompared: CGPoint) -> Bool {
+        return isHighestOrLowestLocationInFuture(context: context, index: index, toCompared: toCompared, checkLowest: true)
+    }
+    
+    private func isHighestOrLowestLocationInFuture(context: AnalyzedContext, index: Int, toCompared: CGPoint, checkLowest: Bool = false) -> Bool {
+        var result = true
+        if index < context.detectedResult.joints.count - 1 {
+            // check next frame to avoid unstability of detection
+            let nextFrameCount = Int(context.detectedResult.frameRate * 0.11)
+            let start = index + 1
+            var end = start + nextFrameCount
+            if end >= context.detectedResult.joints.count - 1 {
+                end = context.detectedResult.joints.count - 1
+            }
+            for i in start ... end {
+                if let wristLocation = getValidLowestWristLocation(context: context, joints: context.detectedResult.joints[i]) {
+                    if checkLowest {
+                        if wristLocation.y < toCompared.y {
+                            result = false
+                            break
+                        }
+                    } else {
+                        if wristLocation.y > toCompared.y {
+                            result = false
+                            break
+                        }
+                    }
+                    
+                }
             }
         }
-        return nil
+        return result
     }
     
     private func isPositiveDirection(left: Int, right: Int) -> Bool {
@@ -429,7 +454,7 @@ class SwingAnalysisManager {
         var result = [PoseSegment]()
         var lastWristLocation: CGPoint?
         var poseSegment: PoseSegment?
-        let maxDistanceInX = 0.0016 * context.scaled
+        let maxDistanceInX = 0.0018 * context.scaled
         let maxDistanceInY = maxDistanceInX * context.aspectRatio
         let minFrameCount = Int(context.detectedResult.frameRate * 0.15)
         let maxFrameCount = Int(context.detectedResult.frameRate * 1)
@@ -439,7 +464,8 @@ class SwingAnalysisManager {
             printPreparingDebugInfo("frame: \(index)")
             if let currentWristLocation = getValidLowestWristLocation(context: context, joints: joints) {
                 if let currentRoot = joints[VNHumanBodyPoseObservation.JointName.root.keyName] {
-                    if currentWristLocation.y < currentRoot.location.y {
+                    // some one wrist higher than root when preparing
+                    if currentWristLocation.y < currentRoot.location.y + maxDistanceInY {
                         var lastLocation = poseSegment?.preparingLowestLocation
                         if lastLocation == nil {
                             lastLocation = lastWristLocation
@@ -505,6 +531,8 @@ class SwingAnalysisManager {
                             if segment.end - segment.start > minFrameCount {
                                 result.append(segment)
                                 printPreparingDebugInfo("preparing append")
+                            } else {
+                                printPreparingDebugInfo("preparing failed, segment: \(segment), minFrameCount: \(minFrameCount)")
                             }
                             poseSegment = nil
                         }
@@ -623,12 +651,12 @@ enum StandType {
 class AnalyzedResult {
     let scaled: CGFloat
     let detectedResult: DetectedResult
-    let keyFrames: [[Int]]
+    let poseSegments: [PoseSegment]
     
-    internal init(scaled: CGFloat, detectedResult: DetectedResult, keyFrames: [[Int]]) {
+    internal init(scaled: CGFloat, detectedResult: DetectedResult, poseSegments: [PoseSegment]) {
         self.scaled = scaled
         self.detectedResult = detectedResult
-        self.keyFrames = keyFrames
+        self.poseSegments = poseSegments
     }
 }
 
@@ -672,6 +700,8 @@ class PoseSegment: CustomStringConvertible {
     var hitHighestLocation: CGPoint?
     // only has value when postType is end
     var endHighestLocation: CGPoint?
+    // only has value when postType is end
+    var endHighestIndex: Int?
     var next: PoseSegment?
     
     internal init(poseType: PoseType, standType: StandType, start: Int, end: Int) {
@@ -687,12 +717,26 @@ class PoseSegment: CustomStringConvertible {
             desc.append(", preparingLowestIndex=\(preparingLowestIndex!)")
         }
         if upHighestIndex != nil {
-            desc.append(", upHighestInde\(upHighestIndex!)")
+            desc.append(", upHighestIndex=\(upHighestIndex!)")
+        }
+        if endHighestIndex != nil {
+            desc.append(", endHighestIndex=\(endHighestIndex!)")
         }
         if next != nil {
             desc.append(", next=\(next!)")
         }
         desc.append("}")
         return desc
+    }
+    
+    func getEnd() -> PoseSegment? {
+        var nextSegment = next
+        while nextSegment != nil {
+            if nextSegment!.poseType == .end {
+                return nextSegment
+            }
+            nextSegment = nextSegment!.next
+        }
+        return nil
     }
 }
