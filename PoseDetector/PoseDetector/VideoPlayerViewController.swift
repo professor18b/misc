@@ -57,9 +57,7 @@ class VideoPlayerViewController: BaseViewController {
             videoRenderView.topAnchor.constraint(equalTo: view.topAnchor),
             videoRenderView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-        
-        
-                
+
         guard let track = asset.tracks(withMediaType: .video).first else {
             DialogUtil.showAlert(viewController: self, title: nil, message: "load video failed")
             return

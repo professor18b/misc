@@ -729,7 +729,7 @@ class PoseSegment: CustomStringConvertible {
         return desc
     }
     
-    func getEnd() -> PoseSegment? {
+    func getEndSegment() -> PoseSegment? {
         var nextSegment = next
         while nextSegment != nil {
             if nextSegment!.poseType == .end {

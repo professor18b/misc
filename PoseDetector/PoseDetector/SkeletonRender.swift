@@ -196,7 +196,7 @@ class SkeletonRender {
             let fontName = "Courier" as CFString
             let font = CTFontCreateWithName(fontName, 60, nil)
             let attributes = [NSAttributedString.Key.font: font]
-            let attributedString = NSAttributedString(string: "\(context.writingFrame)", attributes: attributes)
+            let attributedString = NSAttributedString(string: "\(context.writingFrameIndex)", attributes: attributes)
             let line = CTLineCreateWithAttributedString(attributedString)
             cgContext.textPosition = CGPoint(x: 80, y: frame.height - 120)
             

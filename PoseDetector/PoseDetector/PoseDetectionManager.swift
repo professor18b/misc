@@ -99,7 +99,7 @@ class PoseDetectionManager {
         return CGImagePropertyOrientation(rawValue: orientation)!
     }
     
-    func detectVideo(asset: AVURLAsset, exportSkeleton: Bool = false) -> DetectedResult? {
+    func detectVideo(asset: AVURLAsset) -> DetectedResult? {
         guard let track = asset.tracks(withMediaType: .video).first else {
             return nil
         }
@@ -122,20 +122,9 @@ class PoseDetectionManager {
             frameRate = track.nominalFrameRate
             let orientation = PoseDetectionManager.getTrackOrientation(track: track)
             let dataRate = track.estimatedDataRate
-            print("start detect, duration:\(CMTimeGetSeconds(asset.duration)), dataRate: \(dataRate/(1024*1024)) Mbits/s, frameRate: \(frameRate), orientation: \(orientation.rawValue),")
+            print("start detect, duration:\(CMTimeGetSeconds(asset.duration)), dataRate: \(dataRate/(1024*1024)) Mbits/s, frameRate: \(frameRate), orientation: \(orientation.rawValue)")
             let processInfo = ProcessInfo()
             let startUpTime = processInfo.systemUptime
-            var writer: SkeletonVideoWriter? = nil
-            
-            if exportSkeleton {
-                let targetName = "skeleton_\(asset.url.lastPathComponent)"
-                if var exportUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                    exportUrl.appendPathComponent(targetName, isDirectory: false)
-                    souceManager.delete(sourceUrl: exportUrl)
-                    writer = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: natrualSize, dataRate: dataRate, frameRate: frameRate, transform: track.preferredTransform,  orientation: orientation)
-                }
-            }
-            writer?.startSessionWriting(debug: debug)
             while let sampleBuffer = output.copyNextSampleBuffer() {
                 print(".", terminator: "")
                 let joints = detect(sampleBuffer: sampleBuffer, orientation: orientation)
@@ -143,18 +132,8 @@ class PoseDetectionManager {
                 if hasJoint(joints: joints) {
                     jointFrames += 1
                 }
-                writer?.append(sampleBuffer: sampleBuffer, joints: joints)
             }
             print("")
-            writer?.finishWriting {
-                print("finish writing")
-                PHPhotoLibrary.shared().performChanges({
-                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: writer!.exportUrl)
-                }, completionHandler:{ success, error in
-                    print("saved to photo library, success: \(success), error: \(error ?? "")")
-                    self.souceManager.delete(sourceUrl: writer!.exportUrl)
-                })
-            }
             print("finish detect, costs: \(processInfo.systemUptime - startUpTime)")
         }
         return DetectedResult(size: detectSize, frameRate: frameRate, joints: frameJoints, jointFrames: jointFrames)
@@ -167,116 +146,5 @@ class PoseDetectionManager {
             }
         }
         return false
-    }
-}
-
-class DebugContext {
-    fileprivate(set) var writingFrame = -1
-    fileprivate(set) var writedFrameJoints = [[String: DetectedPoint]]()
-}
-
-class SkeletonVideoWriter {
-    let exportUrl: URL
-    let videoSize: (Int, Int)
-    let orientation: CGImagePropertyOrientation
-    
-    private let writer: AVAssetWriter
-    private let input: AVAssetWriterInput
-    private let skelentonRender: SkeletonRender
-
-    private var debugContext: DebugContext?
-    
-    init(exportUrl: URL, videoSize: CGSize, dataRate: Float, frameRate: Float, transform: CGAffineTransform, orientation: CGImagePropertyOrientation) {
-        self.exportUrl = exportUrl
-        self.videoSize = (Int(videoSize.width), Int(videoSize.height))
-        self.orientation = orientation
-        skelentonRender = SkeletonRender(videoSize: videoSize, orientation: orientation)
-        let compressionProperties: [String: Any] = [
-            AVVideoAverageBitRateKey: SkeletonVideoWriter.getCompressBitRate(videoSize: videoSize, dataRate: dataRate),
-            AVVideoExpectedSourceFrameRateKey: frameRate,
-            AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
-        ]
-        
-        let outputSettings: [String : Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: videoSize.width,
-            AVVideoHeightKey: videoSize.height,
-            AVVideoCompressionPropertiesKey: compressionProperties
-        ]
-        input = AVAssetWriterInput(mediaType: .video, outputSettings: outputSettings)
-        input.transform = transform
-        writer = try! AVAssetWriter(outputURL: exportUrl, fileType: .mp4)
-        writer.add(input)
-    }
-    
-    private static func getCompressBitRate(videoSize: CGSize, dataRate: Float) -> Float {
-        let kbps: Float
-        if videoSize.width >= 1920 {
-            kbps = 4992
-        } else if videoSize.width >= 1280 {
-            kbps = 2496
-        } else if videoSize.width >= 1024 {
-            kbps = 1856
-        } else {
-            kbps = 1216
-        }
-        let compress: Float = kbps * 1024
-        if dataRate < compress {
-            return dataRate
-        }
-        return compress
-    }
-    
-    private func getAudioBitRate(videoSize: CGSize) -> Int {
-        return 64 * 1024
-    }
-    
-    func startSessionWriting(atSourceTime: CMTime = CMTime.zero, debug: Bool = false) {
-        writer.startWriting()
-        writer.startSession(atSourceTime: atSourceTime)
-        if debug {
-            debugContext = DebugContext()
-        }
-    }
-    
-    func finishWriting(completionHandler: @escaping () -> Void) {
-        input.markAsFinished()
-        writer.finishWriting(completionHandler: completionHandler)
-        debugContext = nil
-    }
-    
-    func append(sampleBuffer: CMSampleBuffer, joints: [String : DetectedPoint]) {
-        guard let cvImageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            fatalError("create cvImageBuffer error")
-        }
-        CVPixelBufferLockBaseAddress(cvImageBuffer, .readOnly)
-        let baseAddress = CVPixelBufferGetBaseAddress(cvImageBuffer)
-        // width: 540, height: 960, bytesPerRow: 2176; width: 1080, height: 1920, bytesPerRow: 4352; width: 1920, height: 1080, bytesPerRow: 7680
-        let width = CVPixelBufferGetWidth(cvImageBuffer)
-        let height = CVPixelBufferGetHeight(cvImageBuffer)
-        let bitsPerComponent = 8
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(cvImageBuffer)
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue
-    
-        guard let cgContext = CGContext(data: baseAddress, width: width, height: height, bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: bitmapInfo) else {
-            fatalError("create cgContext error")
-        }
-        CVPixelBufferUnlockBaseAddress(cvImageBuffer, .readOnly)
-        debugContext?.writingFrame += 1
-        skelentonRender.render(in: cgContext, joints: joints, debugContext: debugContext)
-        debugContext?.writedFrameJoints.append(joints)
-        var count = 0
-        while(true) {
-            if input.isReadyForMoreMediaData {
-                input.append(sampleBuffer)
-                break
-            }
-            count += 1
-            if count == 10 {
-                break
-            }
-            Thread.sleep(forTimeInterval: 1)
-        }
     }
 }
