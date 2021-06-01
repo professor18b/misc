@@ -61,7 +61,11 @@ class AnalysisViewController: BaseViewController {
 //                count += 1
 //            }
 //            print("--------------------------")
+            
             self.analyzedResult = self.analysisManager.getAnalyzedResult(detectedResult: detectedResult)
+            
+//            SkeletonVideoExporter.export(asset: self.videoSource,analyzeResult: self.analyzedResult!, exportAllFrames: true, debug: true)
+            
             DispatchQueue.main.async {
                 var text = "used time: \(self.getTimeString(processInfo: processInfo, startUpTime: startUpTime))\n"
                 text.append("frames: \(detectedResult.frames), frameRate: \(detectedResult.frameRate)\n")

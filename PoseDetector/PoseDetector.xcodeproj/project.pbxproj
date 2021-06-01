@@ -11,12 +11,18 @@
 		3A065C452615A5B1005C1E28 /* SourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A065C442615A5B1005C1E28 /* SourceManager.swift */; };
 		3A065C4E2615C707005C1E28 /* VideoOutputViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A065C4D2615C707005C1E28 /* VideoOutputViews.swift */; };
 		3A0AF38326146A8900DB7AE3 /* HomeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0AF38226146A8900DB7AE3 /* HomeViewController.swift */; };
+		3A0D2B6D265F7B3200623AD4 /* testData_eddy1.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A0D2B6B265F7B3200623AD4 /* testData_eddy1.txt */; };
+		3A0D2B6E265F7B3200623AD4 /* testData_eddy2.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A0D2B6C265F7B3200623AD4 /* testData_eddy2.txt */; };
+		3A17384E2664FC1700877B7C /* SkeletonVideoExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A17384D2664FC1700877B7C /* SkeletonVideoExporter.swift */; };
+		3A1738502664FC4900877B7C /* SkeletonVideoWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A17384F2664FC4900877B7C /* SkeletonVideoWriter.swift */; };
+		3A1738522666339000877B7C /* testData_wl_long3.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A1738512666339000877B7C /* testData_wl_long3.txt */; };
 		3A1C9D9D263C1B1C006576E5 /* AuxiliaryLineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1C9D9C263C1B1C006576E5 /* AuxiliaryLineView.swift */; };
 		3A3F044826579D5D000E2EF8 /* testData_golf_nj.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044626579D5D000E2EF8 /* testData_golf_nj.txt */; };
 		3A3F044926579D5D000E2EF8 /* testData_wl_long.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044726579D5D000E2EF8 /* testData_wl_long.txt */; };
 		3A3F044B265B6F2F000E2EF8 /* testData_standard.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044A265B6F2F000E2EF8 /* testData_standard.txt */; };
 		3A3F044D265CA6E9000E2EF8 /* testData_1.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044C265CA6E9000E2EF8 /* testData_1.txt */; };
 		3A3F044F265CC2D2000E2EF8 /* testData_wl_long2.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F044E265CC2D2000E2EF8 /* testData_wl_long2.txt */; };
+		3A3F0451265F4786000E2EF8 /* testData_long3.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3A3F0450265F4786000E2EF8 /* testData_long3.txt */; };
 		3A92EB2126326F28001878E8 /* VideoPlayerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A92EB2026326F28001878E8 /* VideoPlayerViewController.swift */; };
 		3A92EB362632A683001878E8 /* BaseViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A92EB352632A683001878E8 /* BaseViewController.swift */; };
 		3A92EB5426355AFB001878E8 /* ImageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A92EB5326355AFB001878E8 /* ImageViewController.swift */; };
@@ -63,12 +69,18 @@
 		3A065C442615A5B1005C1E28 /* SourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceManager.swift; sourceTree = "<group>"; };
 		3A065C4D2615C707005C1E28 /* VideoOutputViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoOutputViews.swift; sourceTree = "<group>"; };
 		3A0AF38226146A8900DB7AE3 /* HomeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewController.swift; sourceTree = "<group>"; };
+		3A0D2B6B265F7B3200623AD4 /* testData_eddy1.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_eddy1.txt; sourceTree = "<group>"; };
+		3A0D2B6C265F7B3200623AD4 /* testData_eddy2.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_eddy2.txt; sourceTree = "<group>"; };
+		3A17384D2664FC1700877B7C /* SkeletonVideoExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonVideoExporter.swift; sourceTree = "<group>"; };
+		3A17384F2664FC4900877B7C /* SkeletonVideoWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonVideoWriter.swift; sourceTree = "<group>"; };
+		3A1738512666339000877B7C /* testData_wl_long3.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_wl_long3.txt; sourceTree = "<group>"; };
 		3A1C9D9C263C1B1C006576E5 /* AuxiliaryLineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuxiliaryLineView.swift; sourceTree = "<group>"; };
 		3A3F044626579D5D000E2EF8 /* testData_golf_nj.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_golf_nj.txt; sourceTree = "<group>"; };
 		3A3F044726579D5D000E2EF8 /* testData_wl_long.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_wl_long.txt; sourceTree = "<group>"; };
 		3A3F044A265B6F2F000E2EF8 /* testData_standard.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_standard.txt; sourceTree = "<group>"; };
 		3A3F044C265CA6E9000E2EF8 /* testData_1.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_1.txt; sourceTree = "<group>"; };
 		3A3F044E265CC2D2000E2EF8 /* testData_wl_long2.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_wl_long2.txt; sourceTree = "<group>"; };
+		3A3F0450265F4786000E2EF8 /* testData_long3.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = testData_long3.txt; sourceTree = "<group>"; };
 		3A92EB2026326F28001878E8 /* VideoPlayerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerViewController.swift; sourceTree = "<group>"; };
 		3A92EB352632A683001878E8 /* BaseViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseViewController.swift; sourceTree = "<group>"; };
 		3A92EB5326355AFB001878E8 /* ImageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewController.swift; sourceTree = "<group>"; };
@@ -179,6 +191,8 @@
 				3A92EB5326355AFB001878E8 /* ImageViewController.swift */,
 				3A065C442615A5B1005C1E28 /* SourceManager.swift */,
 				3A02E0D32646A4E300E9911A /* SkeletonRender.swift */,
+				3A17384F2664FC4900877B7C /* SkeletonVideoWriter.swift */,
+				3A17384D2664FC1700877B7C /* SkeletonVideoExporter.swift */,
 				3ABA464A2626B6940007A4F4 /* PoseDetectionManager.swift */,
 				3AF83ACF263A5D210057D50E /* SwingAnalysisManager.swift */,
 				3ABA4694262829D50007A4F4 /* VideoTestingViewController.swift */,
@@ -196,6 +210,10 @@
 		3AAFFFBC261313D0008C1389 /* PoseDetectorTests */ = {
 			isa = PBXGroup;
 			children = (
+				3A1738512666339000877B7C /* testData_wl_long3.txt */,
+				3A0D2B6B265F7B3200623AD4 /* testData_eddy1.txt */,
+				3A0D2B6C265F7B3200623AD4 /* testData_eddy2.txt */,
+				3A3F0450265F4786000E2EF8 /* testData_long3.txt */,
 				3A3F044E265CC2D2000E2EF8 /* testData_wl_long2.txt */,
 				3A3F044C265CA6E9000E2EF8 /* testData_1.txt */,
 				3A3F044A265B6F2F000E2EF8 /* testData_standard.txt */,
@@ -329,11 +347,15 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A1738522666339000877B7C /* testData_wl_long3.txt in Resources */,
 				3A3F044B265B6F2F000E2EF8 /* testData_standard.txt in Resources */,
+				3A0D2B6E265F7B3200623AD4 /* testData_eddy2.txt in Resources */,
 				3A3F044F265CC2D2000E2EF8 /* testData_wl_long2.txt in Resources */,
+				3A3F0451265F4786000E2EF8 /* testData_long3.txt in Resources */,
 				3A3F044826579D5D000E2EF8 /* testData_golf_nj.txt in Resources */,
 				3A3F044D265CA6E9000E2EF8 /* testData_1.txt in Resources */,
 				3A3F044926579D5D000E2EF8 /* testData_wl_long.txt in Resources */,
+				3A0D2B6D265F7B3200623AD4 /* testData_eddy1.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,6 +378,7 @@
 				3ABA46A3262836A90007A4F4 /* ApiRequestManager.swift in Sources */,
 				3AAFFFA7261313CF008C1389 /* AppDelegate.swift in Sources */,
 				3A9B55CD261C666E0056B1B4 /* CameraViewController.swift in Sources */,
+				3A1738502664FC4900877B7C /* SkeletonVideoWriter.swift in Sources */,
 				3A92EB2126326F28001878E8 /* VideoPlayerViewController.swift in Sources */,
 				3A92EB362632A683001878E8 /* BaseViewController.swift in Sources */,
 				3A065C4E2615C707005C1E28 /* VideoOutputViews.swift in Sources */,
@@ -373,6 +396,7 @@
 				3ABA468D2627EF9B0007A4F4 /* NotificationName.swift in Sources */,
 				3ABA4695262829D50007A4F4 /* VideoTestingViewController.swift in Sources */,
 				3A9B55E226269CF80056B1B4 /* SettingsViewController.swift in Sources */,
+				3A17384E2664FC1700877B7C /* SkeletonVideoExporter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -549,7 +573,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GZV226A2MY;
+				DEVELOPMENT_TEAM = M67S56VJ6T;
 				INFOPLIST_FILE = PoseDetector/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -568,7 +592,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GZV226A2MY;
+				DEVELOPMENT_TEAM = M67S56VJ6T;
 				INFOPLIST_FILE = PoseDetector/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -587,7 +611,7 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GZV226A2MY;
+				DEVELOPMENT_TEAM = M67S56VJ6T;
 				INFOPLIST_FILE = PoseDetectorTests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -609,7 +633,7 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GZV226A2MY;
+				DEVELOPMENT_TEAM = M67S56VJ6T;
 				INFOPLIST_FILE = PoseDetectorTests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -630,7 +654,7 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GZV226A2MY;
+				DEVELOPMENT_TEAM = M67S56VJ6T;
 				INFOPLIST_FILE = PoseDetectorUITests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -650,7 +674,7 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GZV226A2MY;
+				DEVELOPMENT_TEAM = M67S56VJ6T;
 				INFOPLIST_FILE = PoseDetectorUITests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

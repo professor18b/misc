@@ -14,7 +14,7 @@ class SkeletonVideoExporter {
     
     private static let sourceManager = SourceManager.shared
     
-    static func export(asset: AVURLAsset, analyzeResult: AnalyzedResult, debug: Bool = false, progressHandler: @escaping (_ current: Int, _ total: Int) -> Void = {_,_ in }) {
+    static func export(asset: AVURLAsset, analyzeResult: AnalyzedResult, exportAllFrames: Bool = false, debug: Bool = false, progressHandler: @escaping (_ current: Int, _ total: Int) -> Void = {_,_ in }) {
         guard let track = asset.tracks(withMediaType: .video).first else {
             fatalError("invalid video")
         }
@@ -35,13 +35,13 @@ class SkeletonVideoExporter {
             let startUpTime = processInfo.systemUptime
             
             var exportSegments: [(Int, Int)]
-            if !analyzeResult.poseSegments.isEmpty {
+            if exportAllFrames || analyzeResult.poseSegments.isEmpty {
+                exportSegments = [(0, analyzeResult.detectedResult.frames - 1)]
+            } else {
                 exportSegments = [(Int, Int)]()
                 for poseSegment in analyzeResult.poseSegments {
                     exportSegments.append((poseSegment.start, poseSegment.getEndSegment()!.end))
                 }
-            } else {
-                exportSegments = [(0, analyzeResult.detectedResult.frames - 1)]
             }
             
             var skeletonWriter: SkeletonVideoWriter?

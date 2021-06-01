@@ -109,7 +109,7 @@ class SwingAnalysisManager {
     }
     
     private func printPreparingDebugInfo(_ message: Any) {
-//        print(message)
+        print(message)
     }
     
     private func analyzeEnd(context: AnalyzedContext, hitSegments: [PoseSegment]) ->  [PoseSegment] {
@@ -119,7 +119,7 @@ class SwingAnalysisManager {
         let maxEndFrameCount = Int(context.detectedResult.frameRate * 0.6)
         let minFrameCount = Int(context.detectedResult.frameRate * 0.15)
         let maxFrameCount = Int(context.detectedResult.frameRate * 1.5)
-        let maxDistanceInY = 0.07 * context.scaled
+        let maxDistanceInY = 0.07 * context.getDistanceScaled()
         for preparingSegment in hitSegments {
             let hitSegment = preparingSegment.next!.next!
             printEndDebugInfo("hitSegment: \(hitSegment)")
@@ -266,7 +266,7 @@ class SwingAnalysisManager {
     private func getHitMoveUpThreshold(context: AnalyzedContext, currentWristY: CGFloat, joints: [String: DetectedPoint]) -> CGFloat {
         let lowestShoulderY = getLowestShoulderY(context: context, joints: joints)
         if lowestShoulderY > 0 && currentWristY > lowestShoulderY {
-            return 0.008 * context.scaled
+            return 0.008 * context.getDistanceScaled()
         }
         return 0
     }
@@ -297,8 +297,8 @@ class SwingAnalysisManager {
         let maxStartFrameCount = Int(context.detectedResult.frameRate * 0.5)
         let minFrameCount = Int(context.detectedResult.frameRate * 0.3)
         let maxFrameCount = Int(context.detectedResult.frameRate * 2.5)
-        let maxDistanceYForOverShoulder = 0.003 * context.scaled
-        let maxDistanceYForBelowRoot = 0.106 * context.scaled
+        let maxDistanceYForOverShoulder = 0.003 * context.getDistanceScaled()
+        let maxDistanceYForBelowRoot = 0.106 * context.getDistanceScaled()
         for preparingSegment in preparingSegments {
             let minY = preparingSegment.preparingLowestLocation!.y - 0.015
             lastWristLocation = nil
@@ -452,10 +452,16 @@ class SwingAnalysisManager {
     
     private func analyzePreparing(context: AnalyzedContext) ->  [PoseSegment] {
         var result = [PoseSegment]()
-        var lastWristLocation: CGPoint?
         var poseSegment: PoseSegment?
-        let maxDistanceInX = 0.0018 * context.scaled
+        
+        var lastShoulderLocation: (CGPoint?, CGPoint?)?
+        let maxShoulderDistanceInX = 0.0014 * context.getDistanceScaled()
+        let maxShoulderDistanceInY = maxShoulderDistanceInX * context.aspectRatio
+        
+        var lastWristLocation: CGPoint?
+        let maxDistanceInX = 0.0022 * context.getDistanceScaled()
         let maxDistanceInY = maxDistanceInX * context.aspectRatio
+        
         let minFrameCount = Int(context.detectedResult.frameRate * 0.15)
         let maxFrameCount = Int(context.detectedResult.frameRate * 1)
         let minFrameIntervel = Int(context.detectedResult.frameRate * 1)
@@ -463,6 +469,7 @@ class SwingAnalysisManager {
             let joints = context.detectedResult.joints[index]
             printPreparingDebugInfo("frame: \(index)")
             if let currentWristLocation = getValidLowestWristLocation(context: context, joints: joints) {
+                let currentShoulderLocation = (joints[VNHumanBodyPoseObservation.JointName.leftShoulder.keyName]?.location, joints[VNHumanBodyPoseObservation.JointName.rightShoulder.keyName]?.location)
                 if let currentRoot = joints[VNHumanBodyPoseObservation.JointName.root.keyName] {
                     // some one wrist higher than root when preparing
                     if currentWristLocation.y < currentRoot.location.y + maxDistanceInY {
@@ -473,9 +480,10 @@ class SwingAnalysisManager {
 //                        printPreparingDebugInfo("currentWristLocation: \(currentWristLocation), lastLocation: \(String(describing: lastLocation))")
                         if let lastLocation = lastLocation {
                             var isInPosition = false
+                            let isShoulderStable = isShoulderStable(current: currentShoulderLocation, last: lastShoulderLocation, maxX: maxShoulderDistanceInX, maxY: maxShoulderDistanceInY)
                             let distanceInLocationX = abs(lastLocation.x - currentWristLocation.x)
                             let distanceInLocationY = abs(lastLocation.y - currentWristLocation.y)
-                            if distanceInLocationX < maxDistanceInX && distanceInLocationY < maxDistanceInY {
+                            if isShoulderStable && (distanceInLocationX < maxDistanceInX && distanceInLocationY < maxDistanceInY) {
                                 var overIntervel = result.isEmpty
                                 if !result.isEmpty {
                                     let lastPoseSegment = result[result.count - 1]
@@ -539,8 +547,10 @@ class SwingAnalysisManager {
                     }
                 }
                 lastWristLocation = currentWristLocation
+                lastShoulderLocation = currentShoulderLocation
             } else {
                 lastWristLocation = nil
+                lastShoulderLocation = nil
                 poseSegment = nil
             }
         }
@@ -561,7 +571,7 @@ class SwingAnalysisManager {
                 assert(leftEye != nil && rightEye != nil)
                 let eyeDistance = abs(leftEye!.location.x - rightEye!.location.x)
                 printUpDebugInfo("eyeDistance: \(eyeDistance)")
-                if eyeDistance < 0.03 * context.scaled {
+                if eyeDistance < 0.03 * context.getDistanceScaled() {
                     downTheLine += 1
                 } else {
                     faceOn += 1
@@ -590,6 +600,34 @@ class SwingAnalysisManager {
         return StandType.faceOn
     }
     
+    private func isShoulderStable(current: (CGPoint?, CGPoint?)?, last: (CGPoint?, CGPoint?)?, maxX: CGFloat, maxY: CGFloat) -> Bool {
+        let shoulderMovement = getMaxShoulderMovement(current: current, last: last)
+        return shoulderMovement.x <= maxX && shoulderMovement.y <= maxY
+    }
+    
+    private func getMaxShoulderMovement(current: (CGPoint?, CGPoint?)?, last: (CGPoint?, CGPoint?)?) -> CGPoint {
+        var maxX = CGFloat(0)
+        // 0 is left shoulder, 1 is right shoulder
+        maxX = getMaxDistance(left: current?.0?.x, right: last?.0?.x, max: maxX)
+        maxX = getMaxDistance(left: current?.1?.x, right: last?.1?.x, max: maxX)
+        
+        var maxY = CGFloat(0)
+        maxY = getMaxDistance(left: current?.0?.y, right: last?.0?.y, max: maxY)
+        maxY = getMaxDistance(left: current?.1?.y, right: last?.1?.y, max: maxY)
+        
+        return CGPoint(x: maxX, y: maxY)
+    }
+    
+    private func getMaxDistance(left: CGFloat?, right: CGFloat?, max: CGFloat) -> CGFloat {
+        if left != nil && right != nil {
+            let distance = abs(left! - right!)
+            if distance > max {
+                return distance
+            }
+        }
+        return max
+    }
+    
     private func getValidLowestWristLocation(context: AnalyzedContext, joints: [String: DetectedPoint]) -> CGPoint? {
         var leftWrist = joints[VNHumanBodyPoseObservation.JointName.leftWrist.keyName]
         var rightWrist = joints[VNHumanBodyPoseObservation.JointName.rightWrist.keyName]
@@ -610,7 +648,7 @@ class SwingAnalysisManager {
             fatalError()
         }
         
-        let distanceThreshold = 110 * context.scaled
+        let distanceThreshold = 110 * context.getDistanceScaled()
         let d = distanceInPixel(size: context.detectedResult.size, from: left, to: right)
         if d < distanceThreshold {
 //            let x = getAverage(first: left.location.x, second: right.location.x)
@@ -671,6 +709,14 @@ private class AnalyzedContext {
         self.locationPerPixel = locationPerPixel
         self.scaled = scaled
         self.detectedResult = detectedResult
+    }
+    
+    func getDistanceScaled() -> CGFloat {
+        if scaled < 0.8 {
+            return 0.8
+        } else {
+            return scaled
+        }
     }
 }
 

@@ -23,7 +23,7 @@ class PoseDetectorTests: XCTestCase {
 
     func testExample() throws {
         let bundle = Bundle(for: type(of: self))
-        guard let path = bundle.path(forResource: "testData_golf_nj", ofType: ".txt") else {
+        guard let path = bundle.path(forResource: "testData_wl_long3", ofType: ".txt") else {
             XCTFail("test data not found")
             return
         }
@@ -36,8 +36,18 @@ class PoseDetectorTests: XCTestCase {
         var jointFrame = 0
         let numberFormatter = NumberFormatter()
         var joints = [String: DetectedPoint]()
+        var expecteds = [(Int, Int)]()
         for line in lines {
-            if line.starts(with: "size:") {
+            if line.starts(with: "results:") {
+                var data = line
+                data.removeFirst("results:".count)
+                let resultData = data.split(separator: ";")
+                for result in resultData {
+                    let value = result.split(separator: ",")
+                    expecteds.append((Int(value[0])!, Int(value[1])!))
+                }
+            }
+            else if line.starts(with: "size:") {
                 // size:(1080.0, 1920.0)
                 var data = line
                 data.removeFirst("size:(".count)
@@ -78,8 +88,17 @@ class PoseDetectorTests: XCTestCase {
         let detectedResult = DetectedResult(size: size, frameRate: frameRate, joints: frameJoints, jointFrames: jointFrame)
         print("size: \(detectedResult.size), frameRate: \(frameRate), jointFrames: \(jointFrame), jointsCount: \(frameJoints.count) \n")
         let result = analysisManager.getAnalyzedResult(detectedResult: detectedResult)
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        XCTAssertTrue(expecteds.count > 0)
+        XCTAssertEqual(result.poseSegments.count, expecteds.count)
+        for index in 0 ... expecteds.count - 1 {
+            let expected = expecteds[index]
+            let prepareSegment = result.poseSegments[index]
+            XCTAssertEqual(prepareSegment.poseType, .preparing)
+            XCTAssertEqual(prepareSegment.start, expected.0)
+            let endPoseSegment = prepareSegment.getEndSegment()
+            XCTAssertNotNil(endPoseSegment)
+            XCTAssertEqual(endPoseSegment!.end, expected.1)
+        }
     }
 
     func testPerformanceExample() throws {
