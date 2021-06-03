@@ -109,7 +109,7 @@ class SwingAnalysisManager {
     }
     
     private func printPreparingDebugInfo(_ message: Any) {
-        print(message)
+//        print(message)
     }
     
     private func analyzeEnd(context: AnalyzedContext, hitSegments: [PoseSegment]) ->  [PoseSegment] {
@@ -454,10 +454,10 @@ class SwingAnalysisManager {
         var result = [PoseSegment]()
         var poseSegment: PoseSegment?
         // left shoulder, right shoulder
-        var lastShoulderNeckDistance: (CGPoint?, CGPoint?)?
-        var lastWristNeckDistance: (CGPoint?, CGPoint?)?
+        var lastShoulderAnkleDistance: (CGPoint?, CGPoint?)?
+        var lastWristAnkleDistance: CGPoint?
         
-        let maxDistanceInX = 0.0022 * context.getDistanceScaled()
+        let maxDistanceInX = 0.0020 * context.getDistanceScaled()
         let maxDistanceInY = maxDistanceInX * context.aspectRatio
         
         let minFrameCount = Int(context.detectedResult.frameRate * 0.15)
@@ -465,19 +465,17 @@ class SwingAnalysisManager {
         let minFrameIntervel = Int(context.detectedResult.frameRate * 1)
         for index in (0 ... context.detectedResult.joints.count - 1).reversed() {
             let joints = context.detectedResult.joints[index]
-            printPreparingDebugInfo("frame: \(index)")
+            printPreparingDebugInfo("frame: \(index), from: \(poseSegment?.end ?? -1)")
             if let currentWristLocation = getValidLowestWristLocation(context: context, joints: joints) {
-                if let neckLocation = joints[VNHumanBodyPoseObservation.JointName.neck.keyName]?.location {
+                if let ankleLocation = getLowestAnkle(joints: joints) {
                     if let rootLocation = joints[VNHumanBodyPoseObservation.JointName.root.keyName]?.location {
                         let leftShoulderLocation = joints[VNHumanBodyPoseObservation.JointName.leftShoulder.keyName]?.location
                         let rightShoulderLocation = joints[VNHumanBodyPoseObservation.JointName.rightShoulder.keyName]?.location
-                        let currentShoulderNeckDistance = (getDistance(left: leftShoulderLocation, right: neckLocation), getDistance(left: rightShoulderLocation, right: neckLocation))
+                        let currentShoulderAnkleDistance = (getDistance(left: leftShoulderLocation, right: ankleLocation), getDistance(left: rightShoulderLocation, right: ankleLocation))
                         
-                        let leftWristLocation = joints[VNHumanBodyPoseObservation.JointName.leftWrist.keyName]?.location
-                        let rightWristLocation = joints[VNHumanBodyPoseObservation.JointName.rightWrist.keyName]?.location
-                        let currentWristNeckDistance = (getDistance(left: leftWristLocation, right: neckLocation), getDistance(left: rightWristLocation, right: neckLocation))
+                        let currentWristAnkleDistance = getDistance(left: currentWristLocation, right: ankleLocation)
                         
-                        var isPreparing = (lastWristNeckDistance?.0 != nil && lastWristNeckDistance?.1 != nil && lastShoulderNeckDistance?.0 != nil && lastShoulderNeckDistance?.1 != nil) || poseSegment != nil
+                        var isPreparing = (lastWristAnkleDistance != nil && lastShoulderAnkleDistance?.0 != nil && lastShoulderAnkleDistance?.1 != nil) || poseSegment != nil
                         
                         if isPreparing {
                             // check interval
@@ -497,62 +495,16 @@ class SwingAnalysisManager {
                                 printPreparingDebugInfo("wrist too high, currentWristLocation: \(currentWristLocation), thresholdY: \(rootLocation.y + maxDistanceInY)")
                             } else {
                                 // check wrist
-                                if let currentLeftWristNeckDistance = currentWristNeckDistance.0 {
-                                    if let lastLeftWristDistance = lastWristNeckDistance?.0 {
-                                        let distanceInLocationX = abs(lastLeftWristDistance.x - currentLeftWristNeckDistance.x)
-                                        let distanceInLocationY = abs(lastLeftWristDistance.y - currentLeftWristNeckDistance.y)
-                                        if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
-                                            isPreparing = false
-                                            printPreparingDebugInfo("currentLeftWristNeckDistance: \(currentLeftWristNeckDistance), lastLeftWristDistance: \(lastLeftWristDistance)")
-                                            printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                        }
-                                        printPreparingDebugInfo("currentLeftWristNeckDistance: \(currentLeftWristNeckDistance), lastLeftWristDistance: \(lastLeftWristDistance)")
-                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                    }
-                                }
-                                if let currentRightWristNeckDistance = currentWristNeckDistance.1 {
-                                    if let lastRightWristDistance = lastWristNeckDistance?.1 {
-                                        let distanceInLocationX = abs(lastRightWristDistance.x - currentRightWristNeckDistance.x)
-                                        let distanceInLocationY = abs(lastRightWristDistance.y - currentRightWristNeckDistance.y)
-                                        if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
-                                            isPreparing = false
-                                            printPreparingDebugInfo("currentRightWristNeckDistance: \(currentRightWristNeckDistance), lastRightWristDistance: \(lastRightWristDistance)")
-                                            printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                        }
-                                        printPreparingDebugInfo("currentRightWristNeckDistance: \(currentRightWristNeckDistance), lastRightWristDistance: \(lastRightWristDistance)")
-                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                    }
+                                if let wristMoveless = isLocationMoveless(jointName: "wrist", current: currentWristAnkleDistance, last: lastWristAnkleDistance, maxX: maxDistanceInX, maxY: maxDistanceInY) {
+                                    isPreparing = wristMoveless
                                 }
                             }
                         }
                         
                         if isPreparing {
                             // check shoulder
-                            if let currentLeftShoulderNeckDistance = currentShoulderNeckDistance.0 {
-                                if let lastLeftShoulderDistance = lastShoulderNeckDistance?.0 {
-                                    let distanceInLocationX = abs(lastLeftShoulderDistance.x - currentLeftShoulderNeckDistance.x)
-                                    let distanceInLocationY = abs(lastLeftShoulderDistance.y - currentLeftShoulderNeckDistance.y)
-                                    if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
-                                        isPreparing = false
-                                        printPreparingDebugInfo("currentLeftShoulderNeckDistance: \(currentLeftShoulderNeckDistance), lastLeftShoulderDistance: \(lastLeftShoulderDistance)")
-                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                    }
-                                    printPreparingDebugInfo("currentLeftShoulderNeckDistance: \(currentLeftShoulderNeckDistance), lastLeftShoulderDistance: \(lastLeftShoulderDistance)")
-                                    printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                }
-                            }
-                            if let currentRightShoulderNeckDistance = currentShoulderNeckDistance.1 {
-                                if let lastRightShoulderDistance = lastShoulderNeckDistance?.1 {
-                                    let distanceInLocationX = abs(lastRightShoulderDistance.x - currentRightShoulderNeckDistance.x)
-                                    let distanceInLocationY = abs(lastRightShoulderDistance.y - currentRightShoulderNeckDistance.y)
-                                    if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
-                                        isPreparing = false
-                                        printPreparingDebugInfo("currentRightShoulderNeckDistance: \(currentRightShoulderNeckDistance), lastRightShoulderDistance: \(lastRightShoulderDistance)")
-                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                    }
-                                    printPreparingDebugInfo("currentRightShoulderNeckDistance: \(currentRightShoulderNeckDistance), lastRightShoulderDistance: \(lastRightShoulderDistance)")
-                                    printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                                }
+                            if let shoulderMoveless = isLocationMoveless(jointName: "Shoulder", current: currentShoulderAnkleDistance, last: lastShoulderAnkleDistance, maxX: maxDistanceInX, maxY: maxDistanceInY) {
+                                isPreparing = shoulderMoveless
                             }
                         }
                         
@@ -568,6 +520,10 @@ class SwingAnalysisManager {
                                 }
                                 poseSegment = PoseSegment(poseType: .preparing, standType: standType, start: start, end: end)
                                 printPreparingDebugInfo("preparing create")
+                                // ---
+                                isLocationMoveless(jointName: "Wrist", current: currentWristAnkleDistance, last: lastWristAnkleDistance, maxX: maxDistanceInX, maxY: maxDistanceInY, printSucess: true)
+                                isLocationMoveless(jointName: "Shoulder", current: currentShoulderAnkleDistance, last: lastShoulderAnkleDistance, maxX: maxDistanceInX, maxY: maxDistanceInY, printSucess: true)
+                                /////////////////////
                             }
                         }
                         
@@ -590,14 +546,10 @@ class SwingAnalysisManager {
                             }
                         }
                             
-                        lastWristNeckDistance = currentWristNeckDistance
-                        lastShoulderNeckDistance = currentShoulderNeckDistance
+                        lastWristAnkleDistance = currentWristAnkleDistance
+                        lastShoulderAnkleDistance = currentShoulderAnkleDistance
                     }
                 }
-            } else {
-                lastWristNeckDistance = nil
-                lastShoulderNeckDistance = nil
-                poseSegment = nil
             }
         }
         return result
@@ -646,6 +598,28 @@ class SwingAnalysisManager {
         return StandType.faceOn
     }
     
+    private func getLowestAnkle(joints: [String: DetectedPoint]) -> CGPoint? {
+        let leftAnkle = joints[VNHumanBodyPoseObservation.JointName.leftAnkle.keyName]
+        let rightAnkle = joints[VNHumanBodyPoseObservation.JointName.rightAnkle.keyName]
+        if leftAnkle == nil && rightAnkle == nil {
+            return nil
+        }
+        if leftAnkle == nil {
+            return rightAnkle!.location
+        }
+        if rightAnkle == nil {
+            return leftAnkle!.location
+        }
+        
+        let x = getAverage(first: leftAnkle!.location.x, second: rightAnkle!.location.x)
+        let y = getAverage(first: leftAnkle!.location.y, second: rightAnkle!.location.y)
+        return CGPoint(x: x!, y: y!)
+//        if leftAnkle!.location.y < rightAnkle!.location.y {
+//            return leftAnkle!.location
+//        }
+//        return rightAnkle!.location
+    }
+    
     private func getDistance(left: CGPoint?, right: CGPoint?) -> CGPoint? {
         if left != nil && right != nil {
             return CGPoint(x: right!.x - left!.x, y: right!.y - left!.y)
@@ -653,22 +627,41 @@ class SwingAnalysisManager {
         return nil
     }
     
-    private func isShoulderStable(current: (CGPoint?, CGPoint?)?, last: (CGPoint?, CGPoint?)?, maxX: CGFloat, maxY: CGFloat) -> Bool {
-        let shoulderMovement = getMaxShoulderMovement(current: current, last: last)
-        return shoulderMovement.x <= maxX && shoulderMovement.y <= maxY
+    private func isLocationMoveless(jointName: String, current: CGPoint?, last: CGPoint?, maxX: CGFloat, maxY: CGFloat, printSucess: Bool = false) -> Bool? {
+        if let currentDistance = current {
+            if let lastDistance = last {
+                let distanceInLocationX = abs(lastDistance.x - currentDistance.x)
+                let distanceInLocationY = abs(lastDistance.y - currentDistance.y)
+                if distanceInLocationX > maxX || distanceInLocationY > maxY {
+                    printPreparingDebugInfo("\(jointName): current: \(current!), last: \(last!)")
+                    printPreparingDebugInfo("\(jointName): dx: \(distanceInLocationX), maxX: \(maxX); dy: \(distanceInLocationY), maxY: \(maxY)")
+                    return false
+                } else {
+                    if printSucess {
+                        printPreparingDebugInfo("\(jointName): current: \(current!), last: \(last!)")
+                        printPreparingDebugInfo("\(jointName): dx: \(distanceInLocationX), maxX: \(maxX); dy: \(distanceInLocationY), maxY: \(maxY)")
+                    }
+                    return true
+                }
+            }
+        }
+        return nil
     }
     
-    private func getMaxShoulderMovement(current: (CGPoint?, CGPoint?)?, last: (CGPoint?, CGPoint?)?) -> CGPoint {
-        var maxX = CGFloat(0)
-        // 0 is left shoulder, 1 is right shoulder
-        maxX = getMaxDistance(left: current?.0?.x, right: last?.0?.x, max: maxX)
-        maxX = getMaxDistance(left: current?.1?.x, right: last?.1?.x, max: maxX)
+    private func isLocationMoveless(jointName: String, current: (CGPoint?, CGPoint?)?, last: (CGPoint?, CGPoint?)?, maxX: CGFloat, maxY: CGFloat, printSucess: Bool = false) -> Bool? {
+        let leftResult = isLocationMoveless(jointName: "left\(jointName)", current: current?.0, last: last?.0, maxX: maxX, maxY: maxY)
+        let rightResult = isLocationMoveless(jointName: "right\(jointName)", current: current?.1, last: last?.1, maxX: maxX, maxY: maxY)
+        if leftResult == nil && rightResult == nil {
+            return nil
+        }
+        if leftResult == nil {
+            return rightResult
+        }
+        if rightResult == nil {
+            return leftResult
+        }
         
-        var maxY = CGFloat(0)
-        maxY = getMaxDistance(left: current?.0?.y, right: last?.0?.y, max: maxY)
-        maxY = getMaxDistance(left: current?.1?.y, right: last?.1?.y, max: maxY)
-        
-        return CGPoint(x: maxX, y: maxY)
+        return leftResult! && rightResult!
     }
     
     private func getMaxDistance(left: CGFloat?, right: CGFloat?, max: CGFloat) -> CGFloat {

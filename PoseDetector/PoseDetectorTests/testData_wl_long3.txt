@@ -1,4 +1,4 @@
-results:458,529
+results:453,529;615,677;1000,1085
 size:(1080.0, 1920.0)
 frameRate:30.002563
 jointFrames:1174

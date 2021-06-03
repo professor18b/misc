@@ -23,7 +23,7 @@ class PoseDetectorTests: XCTestCase {
 
     func testExample() throws {
         let bundle = Bundle(for: type(of: self))
-        guard let path = bundle.path(forResource: "testData_wl_long3", ofType: ".txt") else {
+        guard let path = bundle.path(forResource: "testData_1", ofType: ".txt") else {
             XCTFail("test data not found")
             return
         }
@@ -89,7 +89,7 @@ class PoseDetectorTests: XCTestCase {
         print("size: \(detectedResult.size), frameRate: \(frameRate), jointFrames: \(jointFrame), jointsCount: \(frameJoints.count) \n")
         let result = analysisManager.getAnalyzedResult(detectedResult: detectedResult)
         XCTAssertTrue(expecteds.count > 0)
-        XCTAssertEqual(result.poseSegments.count, expecteds.count)
+        XCTAssertEqual(result.poseSegments.count, expecteds.count, "invalid pose segment count")
         for index in 0 ... expecteds.count - 1 {
             let expected = expecteds[index]
             let prepareSegment = result.poseSegments[index]
