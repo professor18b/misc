@@ -520,10 +520,6 @@ class SwingAnalysisManager {
                                 }
                                 poseSegment = PoseSegment(poseType: .preparing, standType: standType, start: start, end: end)
                                 printPreparingDebugInfo("preparing create")
-                                // ---
-                                isLocationMoveless(jointName: "Wrist", current: currentWristAnkleDistance, last: lastWristAnkleDistance, maxX: maxDistanceInX, maxY: maxDistanceInY, printSucess: true)
-                                isLocationMoveless(jointName: "Shoulder", current: currentShoulderAnkleDistance, last: lastShoulderAnkleDistance, maxX: maxDistanceInX, maxY: maxDistanceInY, printSucess: true)
-                                /////////////////////
                             }
                         }
                         

@@ -23,7 +23,7 @@ class PoseDetectorTests: XCTestCase {
 
     func testExample() throws {
         let bundle = Bundle(for: type(of: self))
-        guard let path = bundle.path(forResource: "testData_1", ofType: ".txt") else {
+        guard let path = bundle.path(forResource: "testData_long3", ofType: ".txt") else {
             XCTFail("test data not found")
             return
         }
