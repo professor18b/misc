@@ -190,7 +190,16 @@ class SkeletonRender {
                     cgContext.addLine(to: wristCenterPoint)
                 }
                 cgContext.drawPath(using: .stroke)
+                
+                // draw wrist to neck
+                cgContext.setStrokeColor(CGColor(red: 1, green: 0, blue: 1, alpha: 0.8))
+                if let neckPoint = transformedJoints[VNHumanBodyPoseObservation.JointName.neck.keyName] {
+                    cgContext.move(to: wristCenterPoint)
+                    cgContext.addLine(to: neckPoint)
+                    cgContext.drawPath(using: .stroke)
+                }
             }
+            
             
             // draw frame index
             let fontName = "Courier" as CFString
@@ -217,9 +226,11 @@ class SkeletonRender {
         return nil
     }
     
-    private func getCenterPoint(leftPoint: CGPoint?, rightPoint: CGPoint?) -> CGPoint? {
+    private func getCenterPoint(leftPoint: CGPoint?, rightPoint: CGPoint?, maxDistanceInPixel: CGFloat = 60) -> CGPoint? {
         if leftPoint != nil && rightPoint != nil {
-            return CGPoint(x: (leftPoint!.x + rightPoint!.x) / 2, y: (leftPoint!.y + rightPoint!.y) / 2)
+            if abs(leftPoint!.x - rightPoint!.x) < maxDistanceInPixel && abs(leftPoint!.y - rightPoint!.y) < maxDistanceInPixel {
+                return CGPoint(x: (leftPoint!.x + rightPoint!.x) / 2, y: (leftPoint!.y + rightPoint!.y) / 2)
+            }
         }
         return nil
     }

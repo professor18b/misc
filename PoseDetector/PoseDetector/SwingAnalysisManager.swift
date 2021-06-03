@@ -453,12 +453,10 @@ class SwingAnalysisManager {
     private func analyzePreparing(context: AnalyzedContext) ->  [PoseSegment] {
         var result = [PoseSegment]()
         var poseSegment: PoseSegment?
+        // left shoulder, right shoulder
+        var lastShoulderNeckDistance: (CGPoint?, CGPoint?)?
+        var lastWristNeckDistance: (CGPoint?, CGPoint?)?
         
-        var lastShoulderLocation: (CGPoint?, CGPoint?)?
-        let maxShoulderDistanceInX = 0.0014 * context.getDistanceScaled()
-        let maxShoulderDistanceInY = maxShoulderDistanceInX * context.aspectRatio
-        
-        var lastWristLocation: CGPoint?
         let maxDistanceInX = 0.0022 * context.getDistanceScaled()
         let maxDistanceInY = maxDistanceInX * context.aspectRatio
         
@@ -469,88 +467,136 @@ class SwingAnalysisManager {
             let joints = context.detectedResult.joints[index]
             printPreparingDebugInfo("frame: \(index)")
             if let currentWristLocation = getValidLowestWristLocation(context: context, joints: joints) {
-                let currentShoulderLocation = (joints[VNHumanBodyPoseObservation.JointName.leftShoulder.keyName]?.location, joints[VNHumanBodyPoseObservation.JointName.rightShoulder.keyName]?.location)
-                if let currentRoot = joints[VNHumanBodyPoseObservation.JointName.root.keyName] {
-                    // some one wrist higher than root when preparing
-                    if currentWristLocation.y < currentRoot.location.y + maxDistanceInY {
-                        var lastLocation = poseSegment?.preparingLowestLocation
-                        if lastLocation == nil {
-                            lastLocation = lastWristLocation
-                        }
-//                        printPreparingDebugInfo("currentWristLocation: \(currentWristLocation), lastLocation: \(String(describing: lastLocation))")
-                        if let lastLocation = lastLocation {
-                            var isInPosition = false
-                            let isShoulderStable = isShoulderStable(current: currentShoulderLocation, last: lastShoulderLocation, maxX: maxShoulderDistanceInX, maxY: maxShoulderDistanceInY)
-                            let distanceInLocationX = abs(lastLocation.x - currentWristLocation.x)
-                            let distanceInLocationY = abs(lastLocation.y - currentWristLocation.y)
-                            if isShoulderStable && (distanceInLocationX < maxDistanceInX && distanceInLocationY < maxDistanceInY) {
-                                var overIntervel = result.isEmpty
-                                if !result.isEmpty {
-                                    let lastPoseSegment = result[result.count - 1]
-                                    if lastPoseSegment.start - index > minFrameIntervel {
-                                        overIntervel = true
-                                    } else {
-                                        printPreparingDebugInfo("too close to preparing, lastPoseSegment: \(lastPoseSegment.start)")
-                                    }
+                if let neckLocation = joints[VNHumanBodyPoseObservation.JointName.neck.keyName]?.location {
+                    if let rootLocation = joints[VNHumanBodyPoseObservation.JointName.root.keyName]?.location {
+                        let leftShoulderLocation = joints[VNHumanBodyPoseObservation.JointName.leftShoulder.keyName]?.location
+                        let rightShoulderLocation = joints[VNHumanBodyPoseObservation.JointName.rightShoulder.keyName]?.location
+                        let currentShoulderNeckDistance = (getDistance(left: leftShoulderLocation, right: neckLocation), getDistance(left: rightShoulderLocation, right: neckLocation))
+                        
+                        let leftWristLocation = joints[VNHumanBodyPoseObservation.JointName.leftWrist.keyName]?.location
+                        let rightWristLocation = joints[VNHumanBodyPoseObservation.JointName.rightWrist.keyName]?.location
+                        let currentWristNeckDistance = (getDistance(left: leftWristLocation, right: neckLocation), getDistance(left: rightWristLocation, right: neckLocation))
+                        
+                        var isPreparing = (lastWristNeckDistance?.0 != nil && lastWristNeckDistance?.1 != nil && lastShoulderNeckDistance?.0 != nil && lastShoulderNeckDistance?.1 != nil) || poseSegment != nil
+                        
+                        if isPreparing {
+                            // check interval
+                            if !result.isEmpty {
+                                let lastPoseSegment = result[result.count - 1]
+                                if lastPoseSegment.start - index < minFrameIntervel {
+                                    isPreparing = false
+                                    printPreparingDebugInfo("too close to preparing, lastPoseSegment: \(lastPoseSegment.start)")
                                 }
-                                
-                                isInPosition = overIntervel
+                            }
+                        }
+                        
+                        if isPreparing {
+                            // someone's wrist higher than root when preparing
+                            if currentWristLocation.y > rootLocation.y + maxDistanceInY {
+                                isPreparing = false
+                                printPreparingDebugInfo("wrist too high, currentWristLocation: \(currentWristLocation), thresholdY: \(rootLocation.y + maxDistanceInY)")
                             } else {
-                                printPreparingDebugInfo("currentWristLocation: \(currentWristLocation), lastLocation: \(lastLocation)")
-                                printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
-                            }
-                            
-                            if isInPosition {
-                                if poseSegment == nil {
-                                    let standType = getStandType(context: context, joints: joints)
-                                    let start = index
-                                    let end: Int
-                                    if index < context.detectedResult.frames - 1 {
-                                        end = index + 1
-                                    } else {
-                                        end = index
+                                // check wrist
+                                if let currentLeftWristNeckDistance = currentWristNeckDistance.0 {
+                                    if let lastLeftWristDistance = lastWristNeckDistance?.0 {
+                                        let distanceInLocationX = abs(lastLeftWristDistance.x - currentLeftWristNeckDistance.x)
+                                        let distanceInLocationY = abs(lastLeftWristDistance.y - currentLeftWristNeckDistance.y)
+                                        if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
+                                            isPreparing = false
+                                            printPreparingDebugInfo("currentLeftWristNeckDistance: \(currentLeftWristNeckDistance), lastLeftWristDistance: \(lastLeftWristDistance)")
+                                            printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
+                                        }
+                                        printPreparingDebugInfo("currentLeftWristNeckDistance: \(currentLeftWristNeckDistance), lastLeftWristDistance: \(lastLeftWristDistance)")
+                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
                                     }
-                                    poseSegment = PoseSegment(poseType: .preparing, standType: standType, start: start, end: end)
-                                    printPreparingDebugInfo("preparing create")
                                 }
-                            }
-                            
-                            if let segment = poseSegment {
-                                if segment.preparingLowestLocation == nil || segment.preparingLowestLocation!.y > currentWristLocation.y {
-                                    segment.preparingLowestLocation = currentWristLocation
-                                    segment.preparingLowestIndex = index
-                                }
-                                segment.start = index
-                                
-                                if index == 0 || (!isInPosition && segment.end - segment.start > minFrameCount) || segment.end - segment.start > maxFrameCount {
-                                    result.append(segment)
-                                    printPreparingDebugInfo("preparing append")
-                                    poseSegment = nil
-                                }
-                                
-                                if !isInPosition && poseSegment != nil {
-                                    poseSegment = nil
-                                    printPreparingDebugInfo("preparing failed")
+                                if let currentRightWristNeckDistance = currentWristNeckDistance.1 {
+                                    if let lastRightWristDistance = lastWristNeckDistance?.1 {
+                                        let distanceInLocationX = abs(lastRightWristDistance.x - currentRightWristNeckDistance.x)
+                                        let distanceInLocationY = abs(lastRightWristDistance.y - currentRightWristNeckDistance.y)
+                                        if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
+                                            isPreparing = false
+                                            printPreparingDebugInfo("currentRightWristNeckDistance: \(currentRightWristNeckDistance), lastRightWristDistance: \(lastRightWristDistance)")
+                                            printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
+                                        }
+                                        printPreparingDebugInfo("currentRightWristNeckDistance: \(currentRightWristNeckDistance), lastRightWristDistance: \(lastRightWristDistance)")
+                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
+                                    }
                                 }
                             }
                         }
-                    } else {
+                        
+                        if isPreparing {
+                            // check shoulder
+                            if let currentLeftShoulderNeckDistance = currentShoulderNeckDistance.0 {
+                                if let lastLeftShoulderDistance = lastShoulderNeckDistance?.0 {
+                                    let distanceInLocationX = abs(lastLeftShoulderDistance.x - currentLeftShoulderNeckDistance.x)
+                                    let distanceInLocationY = abs(lastLeftShoulderDistance.y - currentLeftShoulderNeckDistance.y)
+                                    if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
+                                        isPreparing = false
+                                        printPreparingDebugInfo("currentLeftShoulderNeckDistance: \(currentLeftShoulderNeckDistance), lastLeftShoulderDistance: \(lastLeftShoulderDistance)")
+                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
+                                    }
+                                    printPreparingDebugInfo("currentLeftShoulderNeckDistance: \(currentLeftShoulderNeckDistance), lastLeftShoulderDistance: \(lastLeftShoulderDistance)")
+                                    printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
+                                }
+                            }
+                            if let currentRightShoulderNeckDistance = currentShoulderNeckDistance.1 {
+                                if let lastRightShoulderDistance = lastShoulderNeckDistance?.1 {
+                                    let distanceInLocationX = abs(lastRightShoulderDistance.x - currentRightShoulderNeckDistance.x)
+                                    let distanceInLocationY = abs(lastRightShoulderDistance.y - currentRightShoulderNeckDistance.y)
+                                    if distanceInLocationX > maxDistanceInX || distanceInLocationY > maxDistanceInY {
+                                        isPreparing = false
+                                        printPreparingDebugInfo("currentRightShoulderNeckDistance: \(currentRightShoulderNeckDistance), lastRightShoulderDistance: \(lastRightShoulderDistance)")
+                                        printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
+                                    }
+                                    printPreparingDebugInfo("currentRightShoulderNeckDistance: \(currentRightShoulderNeckDistance), lastRightShoulderDistance: \(lastRightShoulderDistance)")
+                                    printPreparingDebugInfo("dx: \(distanceInLocationX), thresholdX: \(maxDistanceInX), dy: \(distanceInLocationY), thresholdY: \(maxDistanceInY)")
+                                }
+                            }
+                        }
+                        
+                        if isPreparing {
+                            if poseSegment == nil {
+                                let standType = getStandType(context: context, joints: joints)
+                                let start = index
+                                let end: Int
+                                if index < context.detectedResult.frames - 1 {
+                                    end = index + 1
+                                } else {
+                                    end = index
+                                }
+                                poseSegment = PoseSegment(poseType: .preparing, standType: standType, start: start, end: end)
+                                printPreparingDebugInfo("preparing create")
+                            }
+                        }
+                        
                         if let segment = poseSegment {
-                            if segment.end - segment.start > minFrameCount {
+                            if segment.preparingLowestLocation == nil || segment.preparingLowestLocation!.y > currentWristLocation.y {
+                                segment.preparingLowestLocation = currentWristLocation
+                                segment.preparingLowestIndex = index
+                            }
+                            segment.start = index
+                            
+                            if index == 0 || (!isPreparing && segment.end - segment.start > minFrameCount) || segment.end - segment.start > maxFrameCount {
                                 result.append(segment)
                                 printPreparingDebugInfo("preparing append")
-                            } else {
-                                printPreparingDebugInfo("preparing failed, segment: \(segment), minFrameCount: \(minFrameCount)")
+                                poseSegment = nil
                             }
-                            poseSegment = nil
+                            
+                            if !isPreparing && poseSegment != nil {
+                                poseSegment = nil
+                                printPreparingDebugInfo("preparing failed")
+                            }
                         }
+                            
+                        lastWristNeckDistance = currentWristNeckDistance
+                        lastShoulderNeckDistance = currentShoulderNeckDistance
                     }
                 }
-                lastWristLocation = currentWristLocation
-                lastShoulderLocation = currentShoulderLocation
             } else {
-                lastWristLocation = nil
-                lastShoulderLocation = nil
+                lastWristNeckDistance = nil
+                lastShoulderNeckDistance = nil
                 poseSegment = nil
             }
         }
@@ -598,6 +644,13 @@ class SwingAnalysisManager {
             return StandType.downTheLine
         }
         return StandType.faceOn
+    }
+    
+    private func getDistance(left: CGPoint?, right: CGPoint?) -> CGPoint? {
+        if left != nil && right != nil {
+            return CGPoint(x: right!.x - left!.x, y: right!.y - left!.y)
+        }
+        return nil
     }
     
     private func isShoulderStable(current: (CGPoint?, CGPoint?)?, last: (CGPoint?, CGPoint?)?, maxX: CGFloat, maxY: CGFloat) -> Bool {
