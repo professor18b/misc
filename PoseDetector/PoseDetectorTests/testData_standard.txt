@@ -1,4 +1,4 @@
-results:51,112;
+results:43,112;
 size:(1080.0, 1920.0)
 frameRate:30.0
 jointFrames:122
