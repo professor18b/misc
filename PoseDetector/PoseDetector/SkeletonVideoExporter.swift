@@ -14,7 +14,7 @@ class SkeletonVideoExporter {
     
     private static let sourceManager = SourceManager.shared
     
-    static func export(asset: AVURLAsset, analyzeResult: AnalyzedResult, exportAllFrames: Bool = false, debug: Bool = false, progressHandler: @escaping (_ current: Int, _ total: Int) -> Void = {_,_ in }) {
+    static func export(asset: AVURLAsset, analyzeResult: AnalyzedResult, noSkeleton: Bool = false, exportAllFrames: Bool = false, debug: Bool = false, progressHandler: @escaping (_ current: Int, _ total: Int) -> Void = {_,_ in }) {
         guard let track = asset.tracks(withMediaType: .video).first else {
             fatalError("invalid video")
         }
@@ -51,11 +51,11 @@ class SkeletonVideoExporter {
                 let currentSegment = exportSegments[segmentIndex]
                 if frameIndex == currentSegment.0 {
                     // start export
-                    let targetName = "skeleton_\(segmentIndex + 1)_\(asset.url.lastPathComponent)"
+                    let targetName = "detected_\(segmentIndex + 1)_\(asset.url.lastPathComponent)"
                     if var exportUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                         exportUrl.appendPathComponent(targetName, isDirectory: false)
                         sourceManager.delete(sourceUrl: exportUrl)
-                        skeletonWriter = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: natrualSize, dataRate: dataRate, frameRate: frameRate, transform: track.preferredTransform,  orientation: orientation)
+                        skeletonWriter = SkeletonVideoWriter(exportUrl: exportUrl, videoSize: natrualSize, dataRate: dataRate, frameRate: frameRate, transform: track.preferredTransform,  orientation: orientation, noSkeleton: noSkeleton)
                     }
                     let atTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
                     skeletonWriter?.startWriting(atSourceFrameIndex: frameIndex, atSourceTime: atTime, debug: debug)
