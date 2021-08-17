@@ -1,0 +1,14 @@
+rootProject.name = "Pose detector"
+include ':app'
+
+include ':18birdies-common-common'
+project(":18birdies-common-common").projectDir = "/Users/wulei/Work/18birdies-git/common/common" as File
+
+include ':18birdies-common-app-common'
+project(":18birdies-common-app-common").projectDir = "/Users/wulei/Work/18birdies-git/common/app/common" as File
+
+include ':18birdies-common-app-request'
+project(":18birdies-common-app-request").projectDir = "/Users/wulei/Work/18birdies-git/common/app/request" as File
+
+include ':18birdies-mongodb-common'
+project(":18birdies-mongodb-common").projectDir = "/Users/wulei/Work/18birdies-git/mongodb-common" as File
