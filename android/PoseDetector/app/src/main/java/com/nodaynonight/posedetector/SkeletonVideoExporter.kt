@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import androidx.annotation.RequiresApi
+import com.osmapps.golf.common.bean.domain.practice2.SwingDetectionResult
 import java.nio.ByteBuffer
 
 
@@ -13,7 +14,26 @@ abstract class ExportException(message: String) : Exception(message)
 
 class VideoTrackNotFoundException : ExportException("video track not found")
 class VideoFormatNotSupportException : ExportException("video format not support")
-class ExportPathException() : ExportException("export path error")
+class ExportPathException : ExportException("export path error")
+
+private class MuxerWrapper(
+    val muxer: MediaMuxer,
+    val exportFile: String,
+    val segmentIndex: Int,
+    val segment: Pair<Int, Int>
+) {
+    var startTimeUs: Long = -1
+    var endTimeUs: Long = -1
+    var videoTrackIndex = -1
+    var audioTrackIndex = -1
+
+    fun addTrack(videoDecoderFormat: MediaFormat, audioDecoderFormat: MediaFormat?) {
+        videoTrackIndex = muxer.addTrack(videoDecoderFormat)
+        audioDecoderFormat?.let {
+            audioTrackIndex = muxer.addTrack(it)
+        }
+    }
+}
 
 /**
  * @author wulei
@@ -21,7 +41,12 @@ class ExportPathException() : ExportException("export path error")
 @RequiresApi(Build.VERSION_CODES.M)
 class SkeletonVideoExporter {
     companion object {
-        fun export(context: Context, uri: Uri) {
+        fun export(
+            context: Context,
+            uri: Uri,
+            swingDetectionResult: SwingDetectionResult,
+            progressHandler: ((current: Int, total: Int, exportFile: String) -> Unit)? = null
+        ) {
             val path = uri.path
             checkNotNull(path) { "path should not be null" }
             println("export path: $path")
@@ -32,34 +57,74 @@ class SkeletonVideoExporter {
             }
             val videoDecoderFormat = videoExtractor.getTrackFormat(videoInputTrack)
 
-            val outputDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: throw ExportPathException()
-            val outputFile = "${outputDir.absolutePath}/exported1.mp4"//${SystemClock.uptimeMillis()}.mp4"
-            val muxer = MediaMuxer(outputFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val videoTrackIndex = muxer.addTrack(videoDecoderFormat)
-
             // add audio
             val audioExtractor = createMediaExtractor(context, uri)
             val audioInputTrack = getAndSelectAudioTrackIndex(audioExtractor)
             var audioDecoderFormat: MediaFormat? = null
-            var audioTrackIndex = -1
             if (audioInputTrack >= 0) {
                 audioDecoderFormat = audioExtractor.getTrackFormat(audioInputTrack)
-                audioTrackIndex = muxer.addTrack(audioDecoderFormat)
             }
 
-            muxer.start()
-            muxVideo(videoTrackIndex, muxer, videoExtractor, videoDecoderFormat)
+            val muxers = createMuxers(context, swingDetectionResult)
+            muxers.forEach { muxerWrapper ->
+                muxerWrapper.addTrack(videoDecoderFormat, audioDecoderFormat)
+            }
+
+            muxers.forEach { it.muxer.start() }
+
+            var currentMuxerIndex = 0
+            muxVideo(videoExtractor, videoDecoderFormat) { frameIndex, byteBuffer, bufferInfo ->
+                muxers.find { frameIndex >= it.segment.first && frameIndex <= it.segment.second }?.apply {
+                    muxer.writeSampleData(videoTrackIndex, byteBuffer, bufferInfo)
+                    if (startTimeUs == -1L) {
+                        startTimeUs = bufferInfo.presentationTimeUs
+                    } else {
+                        endTimeUs = bufferInfo.presentationTimeUs
+                    }
+                    if (segmentIndex > currentMuxerIndex) {
+                        progressHandler?.invoke(currentMuxerIndex + 1, muxers.size, exportFile)
+                        currentMuxerIndex = segmentIndex
+                    }
+                }
+            }
+            progressHandler?.invoke(currentMuxerIndex + 1, muxers.size, muxers[muxers.size - 1].exportFile)
             videoExtractor.release()
             println("************** export video finished")
             if (audioDecoderFormat != null) {
-                muxAudio(audioTrackIndex, muxer, audioExtractor, audioDecoderFormat)
+                muxAudio(audioExtractor, audioDecoderFormat) { byteBuffer, bufferInfo ->
+                    val timeUs = bufferInfo.presentationTimeUs
+                    muxers.find { timeUs >= it.startTimeUs && timeUs <= it.endTimeUs }?.apply {
+                        muxer.writeSampleData(audioTrackIndex, byteBuffer, bufferInfo)
+                    }
+                }
                 audioExtractor.release()
                 println("************** export audio finished")
             }
-            muxer.stop()
-            muxer.release()
+            muxers.forEach { it.muxer.stop() }
+            muxers.forEach { it.muxer.release() }
 
             println("************** export finished")
+        }
+
+        private fun createMuxers(
+            context: Context,
+            swingDetectionResult: SwingDetectionResult
+        ): List<MuxerWrapper> {
+            val outputDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: throw ExportPathException()
+            val muxers = mutableListOf<MuxerWrapper>()
+            var index = 0
+            swingDetectionResult.detectedSwings.forEach { detectedSwing ->
+                val outputFile = "${outputDir.absolutePath}/exported$index.mp4"//${SystemClock.uptimeMillis()}.mp4"
+                val muxer = MediaMuxer(outputFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                muxers.add(
+                    MuxerWrapper(
+                        muxer, outputFile, index,
+                        Pair(detectedSwing.setupSegment.start, detectedSwing.followThroughSegment.end)
+                    )
+                )
+                index++
+            }
+            return muxers
         }
 
         private fun createMediaExtractor(context: Context, uri: Uri): MediaExtractor {
@@ -69,10 +134,9 @@ class SkeletonVideoExporter {
         }
 
         private fun muxAudio(
-            trackIndex: Int,
-            muxer: MediaMuxer,
             extractor: MediaExtractor,
-            decoderFormat: MediaFormat
+            decoderFormat: MediaFormat,
+            muxerHandler: (byteBuffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) -> Unit
         ) {
             val mime = decoderFormat.getString(MediaFormat.KEY_MIME)!!
             println("mime: $mime")
@@ -81,7 +145,7 @@ class SkeletonVideoExporter {
             } else {
                 1024 * 1024
             }
-            println("maxInputSize: $maxInputSize")
+
             val buffer = ByteBuffer.allocate(maxInputSize)
             val bufferInfo = MediaCodec.BufferInfo()
             while (true) {
@@ -92,7 +156,7 @@ class SkeletonVideoExporter {
                         bufferInfo.presentationTimeUs = extractor.sampleTime
                         bufferInfo.flags = extractor.sampleFlags
                         bufferInfo.size = chunkSize
-                        muxer.writeSampleData(trackIndex, buffer, bufferInfo)
+                        muxerHandler(buffer, bufferInfo)
                     }
                     extractor.advance()
                 } else {
@@ -146,10 +210,9 @@ class SkeletonVideoExporter {
 
         @Throws(VideoFormatNotSupportException::class)
         private fun muxVideo(
-            trackIndex: Int,
-            muxer: MediaMuxer,
             extractor: MediaExtractor,
-            decoderFormat: MediaFormat
+            decoderFormat: MediaFormat,
+            muxerHandler: (frameIndex: Int, byteBuffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) -> Unit
         ) {
             val mime = decoderFormat.getString(MediaFormat.KEY_MIME)!!
 
@@ -183,19 +246,13 @@ class SkeletonVideoExporter {
             } else {
                 0
             }
-            val colorFormat = if (decoderFormat.containsKey(MediaFormat.KEY_COLOR_FORMAT)) {
-                decoderFormat.getInteger(MediaFormat.KEY_COLOR_FORMAT)
-            } else {
-                0
-            }
 
             println(
                 "mime: $mime, frameCount: $frameCount, width: $width, height: $height, frameRate: $frameRate, " +
-                        "duration: $duration, rotation: $rotation, bitRate: $bitRate, colorFormat: $colorFormat"
+                        "duration: $duration, rotation: $rotation, bitRate: $bitRate"
             )
 
             val encoderFormat = MediaFormat.createVideoFormat(mime, width, height)
-
             // Set some properties. Failing to specify some of these can cause the MediaCodec
             // configure() call to throw an unhelpful exception.
             encoderFormat.setInteger(
@@ -208,16 +265,16 @@ class SkeletonVideoExporter {
             encoderFormat.setInteger(MediaFormat.KEY_BIT_RATE, getVideoBitRate(width, height, bitRate))
             encoderFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
 
+
             encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             val encoderInputSurface = encoder.createInputSurface()
-            decoder.configure(decoderFormat, encoderInputSurface, null, 0)
-
-            decoder.start()
             encoder.start()
+            decoder.configure(decoderFormat, encoderInputSurface, null, 0)
+            decoder.start()
 
-            val outBufferInfo = MediaCodec.BufferInfo()
-            var outCount = 0
-            var renderImageCount = 0
+            val decoderBufferInfo = MediaCodec.BufferInfo()
+            val encoderBufferInfo = MediaCodec.BufferInfo()
+            var encodedCount = 0
 
             while (true) {
                 val decoderInputBufferIndex = decoder.dequeueInputBuffer(1000)
@@ -253,64 +310,53 @@ class SkeletonVideoExporter {
                     }
                 }
 
-                when (val decoderOutputBufferIndex = decoder.dequeueOutputBuffer(outBufferInfo, 1000)) {
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                        // no output available yet
-                        //                                println("INFO_TRY_AGAIN_LATER")
-                    }
+                when (val decoderOutputBufferIndex = decoder.dequeueOutputBuffer(decoderBufferInfo, 1000)) {
+                    MediaCodec.INFO_TRY_AGAIN_LATER,
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        //                                println("INFO_OUTPUT_FORMAT_CHANGED")
+                        // no output available yet
                     }
                     else -> {
                         check(decoderOutputBufferIndex >= 0)
-                        val doRender = (outBufferInfo.size != 0)
+                        val doRender = (decoderBufferInfo.size != 0)
                         if (doRender) {
-                            decoder.getOutputBuffer(decoderOutputBufferIndex)?.let { buffer ->
-                                val joints =
-                                    JointDetectionManager.INSTANCE.detect(
-                                        buffer,
-                                        width,
-                                        height,
-                                        rotation,
-                                        colorFormat
-                                    )
-                                println("joints: ${joints.getValidJointCount()}")
-                                renderImageCount++
-                            }
+//                            decoder.getOutputBuffer(decoderOutputBufferIndex)?.let { buffer ->
+//                                val joints = JointDetectionManager.INSTANCE.detect(buffer, rotation)
+//                                println("******** joints: ${joints.getValidJointCount()}")
+//                                renderCount++
+//                            }
                         }
                         decoder.releaseOutputBuffer(decoderOutputBufferIndex, doRender)
 
-                        if ((outBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        if ((decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                             encoder.signalEndOfInputStream()
                         }
-                        outCount++
                     }
                 }
 
-                val encoderOutputBufferIndex = encoder.dequeueOutputBuffer(outBufferInfo, 1000)
-                if (encoderOutputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                    // no output available yet
-//                                println("INFO_TRY_AGAIN_LATER")
-                } else if (encoderOutputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-//                                println("INFO_OUTPUT_FORMAT_CHANGED")
-                } else {
-                    check(encoderOutputBufferIndex >= 0)
-                    if (outBufferInfo.size != 0) {
-                        encoder.getOutputBuffer(encoderOutputBufferIndex)?.let { buffer ->
-                            muxer.writeSampleData(trackIndex, buffer, outBufferInfo)
-                        }
+                when (val encoderOutputBufferIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, 1000)) {
+                    MediaCodec.INFO_TRY_AGAIN_LATER,
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     }
+                    else -> {
+                        check(encoderOutputBufferIndex >= 0)
+                        if (encoderBufferInfo.size != 0) {
+                            encoder.getOutputBuffer(encoderOutputBufferIndex)?.let { buffer ->
+                                muxerHandler(encodedCount, buffer, encoderBufferInfo)
+                                encodedCount++
+                            }
+                        }
 
-                    encoder.releaseOutputBuffer(encoderOutputBufferIndex, false)
-                    if ((outBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        break
+                        encoder.releaseOutputBuffer(encoderOutputBufferIndex, false)
+                        if ((encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            break
+                        }
                     }
                 }
             }
-            encoderInputSurface.release()
-            encoder.stop()
             decoder.stop()
-            println("frameCount: $frameCount, outCount: $outCount, renderImageCount: $renderImageCount")
+            encoder.stop()
+            encoderInputSurface.release()
+            println("muxVideo: frameCount: $frameCount, encodedCount: $encodedCount")
         }
 
         private fun getVideoBitRate(width: Int, height: Int, bitRate: Int): Int {

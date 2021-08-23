@@ -1,13 +1,11 @@
 package com.nodaynonight.posedetector
 
 import android.media.Image
-import android.net.Uri
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import com.osmapps.golf.common.bean.domain.misc.Point
-import com.osmapps.golf.common.bean.domain.practice2.JointDetectionResult
 import com.osmapps.golf.common.bean.domain.practice2.JointDetectionResult.DetectedPoint
 import com.osmapps.golf.common.bean.domain.practice2.JointDetectionResult.JointName
 import java.nio.ByteBuffer
@@ -32,16 +30,10 @@ class JointDetectionManager private constructor() {
         buffer: ByteBuffer,
         width: Int,
         height: Int,
-        rotationDegree: Int,
-        colorFormat: Int
+        rotationDegree: Int
     ): Array<DetectedPoint?> {
-//        val inputImage = InputImage.fromByteBuffer(buffer, width, height, rotationDegree, getMLImageFormat(colorFormat))
-//        return detect(inputImage)
-        return Array<DetectedPoint?>(JointName.count()) { null }
-    }
-
-    private fun getMLImageFormat(colorFormat: Int): Int {
-        return colorFormat
+        val inputImage = InputImage.fromByteBuffer(buffer, width, height, rotationDegree, InputImage.IMAGE_FORMAT_YV12)
+        return detect(inputImage)
     }
 
     fun detect(image: Image, rotationDegree: Int): Array<DetectedPoint?> {

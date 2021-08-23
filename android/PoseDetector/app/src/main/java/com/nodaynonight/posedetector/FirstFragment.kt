@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import com.nodaynonight.posedetector.databinding.FragmentFirstBinding
+import com.osmapps.golf.common.bean.domain.practice2.SwingDetectionResult
 import kotlin.concurrent.thread
 
 /**
@@ -53,8 +54,40 @@ class FirstFragment : Fragment() {
                     data?.data?.let {
                         thread {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-//                                SkeletonVideoExporter(requireContext(), it).export()
-                                SkeletonVideoExporter.export(requireContext(),it)
+                                val segments = mutableListOf<SwingDetectionResult.SwingSegment>()
+                                segments.add(SwingDetectionResult.SwingSegment(0, 10))
+                                segments.add(SwingDetectionResult.SwingSegment(11, 20))
+                                segments.add(SwingDetectionResult.SwingSegment(21, 30))
+                                segments.add(SwingDetectionResult.SwingSegment(31, 40))
+
+                                val detectedSwing = SwingDetectionResult.DetectedSwing.fromSegments(
+                                    SwingDetectionResult.StandType.FACE_ON,
+                                    SwingDetectionResult.HandType.LEFT,
+                                    segments
+                                )
+
+                                val segments2 = mutableListOf<SwingDetectionResult.SwingSegment>()
+                                segments2.add(SwingDetectionResult.SwingSegment(50, 60))
+                                segments2.add(SwingDetectionResult.SwingSegment(61, 70))
+                                segments2.add(SwingDetectionResult.SwingSegment(71, 80))
+                                segments2.add(SwingDetectionResult.SwingSegment(81, 90))
+
+                                val detectedSwing2 = SwingDetectionResult.DetectedSwing.fromSegments(
+                                    SwingDetectionResult.StandType.FACE_ON,
+                                    SwingDetectionResult.HandType.LEFT,
+                                    segments2
+                                )
+                                val detectedSwings =
+                                    mutableListOf<SwingDetectionResult.DetectedSwing>(detectedSwing, detectedSwing2)
+
+                                val swingDetectionResult = SwingDetectionResult(1.0, detectedSwings)
+                                SkeletonVideoExporter.export(
+                                    requireContext(),
+                                    it,
+                                    swingDetectionResult
+                                ) { current, total, exportFile ->
+                                    println("exporting: $current/$total, exportFile:$exportFile")
+                                }
                             }
                         }
                     }
