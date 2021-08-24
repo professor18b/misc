@@ -11,6 +11,8 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import com.nodaynonight.posedetector.databinding.FragmentFirstBinding
 import com.osmapps.golf.model.practice2.SwingDetectionManager
+import com.squarevalley.i8birdies.improve.aicoach.detection.JointDetectionManager
+import com.squarevalley.i8birdies.improve.aicoach.detection.SkeletonVideoExporter
 import kotlin.concurrent.thread
 
 /**

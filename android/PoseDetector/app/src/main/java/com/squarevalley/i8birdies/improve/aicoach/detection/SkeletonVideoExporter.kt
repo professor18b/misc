@@ -1,4 +1,4 @@
-package com.nodaynonight.posedetector
+package com.squarevalley.i8birdies.improve.aicoach.detection
 
 import android.content.Context
 import android.media.*
