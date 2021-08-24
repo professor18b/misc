@@ -50,16 +50,16 @@ class SkeletonVideoExporter {
             val path = uri.path
             checkNotNull(path) { "path should not be null" }
             println("export path: $path")
-            val videoExtractor = createMediaExtractor(context, uri)
-            val videoInputTrack = getAndSelectVideoTrackIndex(videoExtractor)
+            val videoExtractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
+            val videoInputTrack = SkeletonMediaUtil.getAndSelectVideoTrackIndex(videoExtractor)
             if (videoInputTrack < 0) {
                 throw VideoTrackNotFoundException()
             }
             val videoDecoderFormat = videoExtractor.getTrackFormat(videoInputTrack)
 
             // add audio
-            val audioExtractor = createMediaExtractor(context, uri)
-            val audioInputTrack = getAndSelectAudioTrackIndex(audioExtractor)
+            val audioExtractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
+            val audioInputTrack = SkeletonMediaUtil.getAndSelectAudioTrackIndex(audioExtractor)
             var audioDecoderFormat: MediaFormat? = null
             if (audioInputTrack >= 0) {
                 audioDecoderFormat = audioExtractor.getTrackFormat(audioInputTrack)
@@ -127,11 +127,6 @@ class SkeletonVideoExporter {
             return muxers
         }
 
-        private fun createMediaExtractor(context: Context, uri: Uri): MediaExtractor {
-            val extractor = MediaExtractor()
-            extractor.setDataSource(context, uri, null)
-            return extractor
-        }
 
         private fun muxAudio(
             extractor: MediaExtractor,
@@ -262,7 +257,10 @@ class SkeletonVideoExporter {
             encoderFormat.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             encoderFormat.setLong(MediaFormat.KEY_DURATION, duration)
             encoderFormat.setInteger(MediaFormat.KEY_ROTATION, rotation)
-            encoderFormat.setInteger(MediaFormat.KEY_BIT_RATE, getVideoBitRate(width, height, bitRate))
+            encoderFormat.setInteger(
+                MediaFormat.KEY_BIT_RATE,
+                SkeletonMediaUtil.getVideoBitRate(width, height, bitRate)
+            )
             encoderFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
 
 
@@ -276,7 +274,7 @@ class SkeletonVideoExporter {
             val encoderBufferInfo = MediaCodec.BufferInfo()
             var encodedCount = 0
 
-            while (true) {
+            loop@ while (true) {
                 val decoderInputBufferIndex = decoder.dequeueInputBuffer(1000)
                 if (decoderInputBufferIndex >= 0) {
                     decoder.getInputBuffer(decoderInputBufferIndex)?.let { byteBuffer ->
@@ -348,7 +346,7 @@ class SkeletonVideoExporter {
 
                         encoder.releaseOutputBuffer(encoderOutputBufferIndex, false)
                         if ((encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                            break
+                            break@loop
                         }
                     }
                 }
@@ -357,56 +355,6 @@ class SkeletonVideoExporter {
             encoder.stop()
             encoderInputSurface.release()
             println("muxVideo: frameCount: $frameCount, encodedCount: $encodedCount")
-        }
-
-        private fun getVideoBitRate(width: Int, height: Int, bitRate: Int): Int {
-            val pixels = width * height
-            val kbps = if (pixels >= 1920 * 1080) {
-                4992
-            } else if (pixels >= 1280 * 720) {
-                2496
-            } else if (pixels >= 960 * 540) {
-                1856
-            } else {
-                1216
-            }
-            val compressed = kbps * 1024
-            if (bitRate in 1 until compressed) {
-                return bitRate
-            }
-            return compressed
-        }
-
-        private fun getAndSelectVideoTrackIndex(extractor: MediaExtractor): Int {
-            for (index in 0 until extractor.trackCount) {
-                if (isVideoFormat(extractor.getTrackFormat(index))) {
-                    extractor.selectTrack(index)
-                    return index
-                }
-            }
-            return -1
-        }
-
-        private fun getAndSelectAudioTrackIndex(extractor: MediaExtractor): Int {
-            for (index in 0 until extractor.trackCount) {
-                if (isAudioFormat(extractor.getTrackFormat(index))) {
-                    extractor.selectTrack(index)
-                    return index
-                }
-            }
-            return -1
-        }
-
-        private fun isVideoFormat(format: MediaFormat): Boolean {
-            return getMimeTypeFor(format)?.startsWith("video/") ?: false
-        }
-
-        private fun isAudioFormat(format: MediaFormat): Boolean {
-            return getMimeTypeFor(format)?.startsWith("audio/") ?: false
-        }
-
-        private fun getMimeTypeFor(format: MediaFormat): String? {
-            return format.getString(MediaFormat.KEY_MIME)
         }
     }
 }

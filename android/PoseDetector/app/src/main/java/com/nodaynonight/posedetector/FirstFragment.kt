@@ -10,7 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import com.nodaynonight.posedetector.databinding.FragmentFirstBinding
-import com.osmapps.golf.common.bean.domain.practice2.SwingDetectionResult
+import com.osmapps.golf.model.practice2.SwingDetectionManager
 import kotlin.concurrent.thread
 
 /**
@@ -27,7 +27,7 @@ class FirstFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
 
         _binding = FragmentFirstBinding.inflate(inflater, container, false)
         return binding.root
@@ -54,39 +54,51 @@ class FirstFragment : Fragment() {
                     data?.data?.let {
                         thread {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                val segments = mutableListOf<SwingDetectionResult.SwingSegment>()
-                                segments.add(SwingDetectionResult.SwingSegment(0, 10))
-                                segments.add(SwingDetectionResult.SwingSegment(11, 20))
-                                segments.add(SwingDetectionResult.SwingSegment(21, 30))
-                                segments.add(SwingDetectionResult.SwingSegment(31, 40))
-
-                                val detectedSwing = SwingDetectionResult.DetectedSwing.fromSegments(
-                                    SwingDetectionResult.StandType.FACE_ON,
-                                    SwingDetectionResult.HandType.LEFT,
-                                    segments
-                                )
-
-                                val segments2 = mutableListOf<SwingDetectionResult.SwingSegment>()
-                                segments2.add(SwingDetectionResult.SwingSegment(50, 60))
-                                segments2.add(SwingDetectionResult.SwingSegment(61, 70))
-                                segments2.add(SwingDetectionResult.SwingSegment(71, 80))
-                                segments2.add(SwingDetectionResult.SwingSegment(81, 90))
-
-                                val detectedSwing2 = SwingDetectionResult.DetectedSwing.fromSegments(
-                                    SwingDetectionResult.StandType.FACE_ON,
-                                    SwingDetectionResult.HandType.LEFT,
-                                    segments2
-                                )
-                                val detectedSwings =
-                                    mutableListOf<SwingDetectionResult.DetectedSwing>(detectedSwing, detectedSwing2)
-
-                                val swingDetectionResult = SwingDetectionResult(1.0, detectedSwings)
-                                SkeletonVideoExporter.export(
-                                    requireContext(),
-                                    it,
-                                    swingDetectionResult
-                                ) { current, total, exportFile ->
-                                    println("exporting: $current/$total, exportFile:$exportFile")
+//                                val segments = mutableListOf<SwingDetectionResult.SwingSegment>()
+//                                segments.add(SwingDetectionResult.SwingSegment(0, 10))
+//                                segments.add(SwingDetectionResult.SwingSegment(11, 20))
+//                                segments.add(SwingDetectionResult.SwingSegment(21, 30))
+//                                segments.add(SwingDetectionResult.SwingSegment(31, 40))
+//
+//                                val detectedSwing = SwingDetectionResult.DetectedSwing.fromSegments(
+//                                    SwingDetectionResult.StandType.FACE_ON,
+//                                    SwingDetectionResult.HandType.LEFT,
+//                                    segments
+//                                )
+//
+//                                val segments2 = mutableListOf<SwingDetectionResult.SwingSegment>()
+//                                segments2.add(SwingDetectionResult.SwingSegment(50, 60))
+//                                segments2.add(SwingDetectionResult.SwingSegment(61, 70))
+//                                segments2.add(SwingDetectionResult.SwingSegment(71, 80))
+//                                segments2.add(SwingDetectionResult.SwingSegment(81, 90))
+//
+//                                val detectedSwing2 = SwingDetectionResult.DetectedSwing.fromSegments(
+//                                    SwingDetectionResult.StandType.FACE_ON,
+//                                    SwingDetectionResult.HandType.LEFT,
+//                                    segments2
+//                                )
+//                                val detectedSwings =
+//                                    mutableListOf<SwingDetectionResult.DetectedSwing>(detectedSwing, detectedSwing2)
+//
+//                                val swingDetectionResult = SwingDetectionResult(1.0, detectedSwings)
+                                val jointDetectionResult =
+                                    JointDetectionManager.INSTANCE.detectVideo(requireContext(), it)
+                                if (jointDetectionResult != null) {
+                                    val swingDetectionResult =
+                                        SwingDetectionManager.INSTANCE.detect(jointDetectionResult)
+                                    if (!swingDetectionResult.detectedSwings.isNullOrEmpty()) {
+                                        SkeletonVideoExporter.export(
+                                            requireContext(),
+                                            it,
+                                            swingDetectionResult
+                                        ) { current, total, exportFile ->
+                                            println("exporting: $current/$total, exportFile:$exportFile")
+                                        }
+                                    } else {
+                                        println("no swing found")
+                                    }
+                                } else {
+                                    println("no joint found")
                                 }
                             }
                         }
