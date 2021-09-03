@@ -1,15 +1,15 @@
 package com.nodaynonight.posedetector
 
 import android.os.Bundle
-import com.google.android.material.snackbar.Snackbar
+import android.view.Menu
+import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
-import android.view.Menu
-import android.view.MenuItem
 import com.nodaynonight.posedetector.databinding.ActivityMainBinding
+import com.osmapps.framework.JkFrame
 
 class MainActivity : AppCompatActivity() {
 
@@ -19,6 +19,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        JkFrame.init(application)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

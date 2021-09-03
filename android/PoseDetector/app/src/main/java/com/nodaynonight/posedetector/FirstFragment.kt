@@ -2,17 +2,27 @@ package com.nodaynonight.posedetector
 
 import android.app.Activity.RESULT_OK
 import android.content.Intent
+import android.media.MediaFormat
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.RequiresApi
 import androidx.fragment.app.Fragment
 import com.nodaynonight.posedetector.databinding.FragmentFirstBinding
+import com.osmapps.golf.common.bean.domain.practice2.SwingDetectionResult
+import com.osmapps.golf.common.gson.GsonFactory
 import com.osmapps.golf.model.practice2.SwingDetectionManager
 import com.squarevalley.i8birdies.improve.aicoach.detection.JointDetectionManager
+import com.squarevalley.i8birdies.improve.aicoach.detection.SkeletonMediaUtil
 import com.squarevalley.i8birdies.improve.aicoach.detection.SkeletonVideoExporter
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
+import java.io.FileOutputStream
 import kotlin.concurrent.thread
 
 /**
@@ -48,6 +58,7 @@ class FirstFragment : Fragment() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.N)
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
@@ -56,49 +67,84 @@ class FirstFragment : Fragment() {
                     data?.data?.let {
                         thread {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-//                                val segments = mutableListOf<SwingDetectionResult.SwingSegment>()
-//                                segments.add(SwingDetectionResult.SwingSegment(0, 10))
-//                                segments.add(SwingDetectionResult.SwingSegment(11, 20))
-//                                segments.add(SwingDetectionResult.SwingSegment(21, 30))
-//                                segments.add(SwingDetectionResult.SwingSegment(31, 40))
-//
-//                                val detectedSwing = SwingDetectionResult.DetectedSwing.fromSegments(
-//                                    SwingDetectionResult.StandType.FACE_ON,
-//                                    SwingDetectionResult.HandType.LEFT,
-//                                    segments
-//                                )
-//
-//                                val segments2 = mutableListOf<SwingDetectionResult.SwingSegment>()
-//                                segments2.add(SwingDetectionResult.SwingSegment(50, 60))
-//                                segments2.add(SwingDetectionResult.SwingSegment(61, 70))
-//                                segments2.add(SwingDetectionResult.SwingSegment(71, 80))
-//                                segments2.add(SwingDetectionResult.SwingSegment(81, 90))
-//
-//                                val detectedSwing2 = SwingDetectionResult.DetectedSwing.fromSegments(
-//                                    SwingDetectionResult.StandType.FACE_ON,
-//                                    SwingDetectionResult.HandType.LEFT,
-//                                    segments2
-//                                )
-//                                val detectedSwings =
-//                                    mutableListOf<SwingDetectionResult.DetectedSwing>(detectedSwing, detectedSwing2)
-//
-//                                val swingDetectionResult = SwingDetectionResult(1.0, detectedSwings)
                                 val jointDetectionResult =
                                     JointDetectionManager.INSTANCE.detectVideo(requireContext(), it)
                                 if (jointDetectionResult != null) {
-                                    val swingDetectionResult =
-                                        SwingDetectionManager.INSTANCE.detect(jointDetectionResult)
-                                    if (!swingDetectionResult.detectedSwings.isNullOrEmpty()) {
-                                        SkeletonVideoExporter.export(
-                                            requireContext(),
-                                            it,
-                                            swingDetectionResult
-                                        ) { current, total, exportFile ->
-                                            println("exporting: $current/$total, exportFile:$exportFile")
-                                        }
-                                    } else {
-                                        println("no swing found")
+                                    val json =
+                                        GsonFactory.createCommonGsonBuilder().create().toJson(jointDetectionResult)
+                                    MainScope().launch {
+                                        binding.resultText.setText(json)
+                                        val outputDir =
+                                            requireContext().getExternalFilesDir(Environment.DIRECTORY_MOVIES)!!
+                                        val outputFile = "${outputDir.absolutePath}/joint.json"
+                                        val fos = FileOutputStream(outputFile)
+                                        fos.write(json.toByteArray())
+                                        fos.close();
                                     }
+                                    val exportedFilesSize = mutableMapOf<String, Int>()
+                                    var swingDetectionResult =
+                                        SwingDetectionManager.INSTANCE.detect(jointDetectionResult)
+                                    if (swingDetectionResult.detectedSwings.isNullOrEmpty()) {
+                                        println("no swing found")
+                                        val segments = mutableListOf<SwingDetectionResult.SwingSegment>()
+                                        segments.add(SwingDetectionResult.SwingSegment(0, 10))
+                                        segments.add(SwingDetectionResult.SwingSegment(11, 20))
+                                        segments.add(SwingDetectionResult.SwingSegment(21, 30))
+                                        segments.add(SwingDetectionResult.SwingSegment(31, 40))
+
+                                        val detectedSwing = SwingDetectionResult.DetectedSwing.fromSegments(
+                                            SwingDetectionResult.StandType.FACE_ON,
+                                            SwingDetectionResult.HandType.LEFT,
+                                            segments
+                                        )
+
+                                        val segments2 = mutableListOf<SwingDetectionResult.SwingSegment>()
+                                        segments2.add(SwingDetectionResult.SwingSegment(50, 60))
+                                        segments2.add(SwingDetectionResult.SwingSegment(61, 70))
+                                        segments2.add(SwingDetectionResult.SwingSegment(71, 80))
+                                        segments2.add(SwingDetectionResult.SwingSegment(81, 90))
+
+                                        val detectedSwing2 = SwingDetectionResult.DetectedSwing.fromSegments(
+                                            SwingDetectionResult.StandType.FACE_ON,
+                                            SwingDetectionResult.HandType.LEFT,
+                                            segments2
+                                        )
+                                        val detectedSwings =
+                                            mutableListOf<SwingDetectionResult.DetectedSwing>(
+                                                detectedSwing,
+                                                detectedSwing2
+                                            )
+
+                                        swingDetectionResult = SwingDetectionResult(1.0, detectedSwings)
+                                    }
+                                    SkeletonVideoExporter.export(
+                                        requireContext(),
+                                        it,
+                                        jointDetectionResult,
+                                        swingDetectionResult
+                                    ) { current, joints, exportFile ->
+                                        exportedFilesSize[exportFile] = joints.duration
+                                        println("exporting: $current, exportFile:$exportFile, duration: ${joints.duration}")
+                                    }
+                                    exportedFilesSize.forEach { (exportFile, count) ->
+                                        val extractor = SkeletonMediaUtil.createMediaExtractor(
+                                            requireContext(),
+                                            Uri.parse(exportFile)
+                                        )
+                                        val videoInputTrack =
+                                            SkeletonMediaUtil.getAndSelectVideoTrackIndex(extractor)
+                                        check(videoInputTrack >= 0)
+                                        val decoderFormat = extractor.getTrackFormat(videoInputTrack)
+                                        val mime = decoderFormat.getString(MediaFormat.KEY_MIME)!!
+                                        val frameRate = decoderFormat.getInteger(MediaFormat.KEY_FRAME_RATE)
+                                        val frameCount = if (decoderFormat.containsKey("frame-count")) {
+                                            decoderFormat.getInteger("frame-count")
+                                        } else {
+                                            -1
+                                        }
+                                        println("check -- file:$exportFile, mime: $mime, frameRate: $frameRate, frameCount: $frameCount, jointsCount: $count")
+                                    }
+
                                 } else {
                                     println("no joint found")
                                 }

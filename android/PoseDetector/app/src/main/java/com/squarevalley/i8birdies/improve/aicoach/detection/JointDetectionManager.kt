@@ -34,7 +34,8 @@ class JointDetectionManager private constructor() {
     }
 
     private val options =
-        PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).setExecutor(executor).build()
+        PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).setExecutor(
+            executor).build()
 
     fun detect(
         buffer: ByteBuffer,
@@ -42,7 +43,9 @@ class JointDetectionManager private constructor() {
         height: Int,
         rotationDegree: Int
     ): List<DetectedPoint?> {
-        val inputImage = InputImage.fromByteBuffer(buffer, width, height, rotationDegree, InputImage.IMAGE_FORMAT_YV12)
+        val inputImage =
+            InputImage.fromByteBuffer(buffer, width, height, rotationDegree,
+                InputImage.IMAGE_FORMAT_YV12)
         return detect(inputImage)
     }
 
@@ -51,7 +54,8 @@ class JointDetectionManager private constructor() {
         return detect(inputImage)
     }
 
-    fun detectVideo(context: Context, uri: Uri): JointDetectionResult? {
+    fun detectVideo(context: Context, uri: Uri,
+                    progressHandler: ((current: Int, total: Int) -> Unit)? = null): JointDetectionResult? {
         val path = uri.path
         checkNotNull(path) { "path should not be null" }
         println("detect path: $path")
@@ -88,6 +92,7 @@ class JointDetectionManager private constructor() {
         } else {
             0
         }
+        var frameIndex = 0
 
         println(
             "mime: $mime, frameCount: $frameCount, width: $width, height: $height, frameRate: $frameRate, " +
@@ -135,6 +140,7 @@ class JointDetectionManager private constructor() {
 
             when (val decoderOutputBufferIndex = decoder.dequeueOutputBuffer(decoderBufferInfo, 1000)) {
                 MediaCodec.INFO_TRY_AGAIN_LATER,
+                MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED,
                 MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     // no output available yet
                 }
@@ -144,8 +150,8 @@ class JointDetectionManager private constructor() {
                     if (doRender) {
                         decoder.getOutputImage(decoderOutputBufferIndex)?.let { image ->
                             val joints = detect(image, rotation)
+                            progressHandler?.invoke(++frameIndex, frameCount)
                             detectedPoints.add(joints)
-                            println("******** joints: ${joints.getValidJointCount()}")
                         }
                     }
                     decoder.releaseOutputBuffer(decoderOutputBufferIndex, doRender)
@@ -157,7 +163,12 @@ class JointDetectionManager private constructor() {
             }
         }
         decoder.stop()
-        return JointDetectionResult(Size(width, height), frameRate.toFloat(), detectedPoints)
+        val size = if (rotation == 90 || rotation == 270) {
+            Size(height, width)
+        } else {
+            Size(width, height)
+        }
+        return JointDetectionResult(size, frameRate.toFloat(), frameCount, rotation, detectedPoints)
     }
 
     private fun detect(inputImage: InputImage): List<DetectedPoint?> {
@@ -175,18 +186,19 @@ class JointDetectionManager private constructor() {
         pose.allPoseLandmarks.forEach { poseLandmark ->
             JointName.parseFromMLKit(poseLandmark.landmarkType)?.let {
                 val point =
-                    Point(
-                        getPercentage(poseLandmark.position.x, inputImage.width),
-                        getPercentage(poseLandmark.position.y, inputImage.height)
-                    )
-                val detectedPoint = DetectedPoint(point, 1.0)
-                detectedPoints[it.index()] = detectedPoint
-                when (it) {
-                    JointName.LEFT_SHOULDER -> leftShoulder = detectedPoint
-                    JointName.RIGHT_SHOULDER -> rightShoulder = detectedPoint
-                    JointName.LEFT_HIP -> leftHip = detectedPoint
-                    JointName.RIGHT_HIP -> rightHip = detectedPoint
-                    else -> {
+                    Point.fromRotatedImage(poseLandmark.position.x.toDouble(),
+                        poseLandmark.position.y.toDouble(),
+                        inputImage.width, inputImage.height, inputImage.rotationDegrees)
+                if (point != null) {
+                    val detectedPoint = DetectedPoint(point, poseLandmark.inFrameLikelihood.toDouble())
+                    detectedPoints[it.index()] = detectedPoint
+                    when (it) {
+                        JointName.LEFT_SHOULDER -> leftShoulder = detectedPoint
+                        JointName.RIGHT_SHOULDER -> rightShoulder = detectedPoint
+                        JointName.LEFT_HIP -> leftHip = detectedPoint
+                        JointName.RIGHT_HIP -> rightHip = detectedPoint
+                        else -> {
+                        }
                     }
                 }
             }
@@ -198,10 +210,6 @@ class JointDetectionManager private constructor() {
             detectedPoints[JointName.ROOT.index()] = getMiddlePoint(leftHip!!, rightHip!!)
         }
         return detectedPoints
-    }
-
-    private fun getPercentage(value: Float, size: Int): Double {
-        return value / size.toDouble()
     }
 
     private fun getMiddlePoint(left: DetectedPoint, right: DetectedPoint): DetectedPoint {
