@@ -92,6 +92,8 @@ class SkeletonRender {
         }
         
         scalingTransform = CGAffineTransform(scaleX: frame.width, y: frame.height)
+      print("videoSize: \(videoSize)")
+      print("frame: \(frame)")
     }
     
     func render(in cgContext: CGContext, joints: [String: DetectedPoint], debugContext: DebugContext? = nil) {
@@ -143,6 +145,20 @@ class SkeletonRender {
             addJointCirclr(cgContext: cgContext, point: entry.value)
         }
         cgContext.drawPath(using: .fill)
+      
+      cgContext.setFillColor(CGColor(red: 1, green: 0.5, blue: 1, alpha: 0.8))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 10.0,y: 10.0))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 100.0,y: 10.0))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 500.0,y: 10.0))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 800.0,y: 10.0))
+      
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 100.0,y: 10.0))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 100.0,y: 100.0))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 100.0,y: 500.0))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 100.0,y: 800.0))
+      addJointCirclr(cgContext: cgContext, point: CGPoint(x: 100.0,y: 1000.0))
+      cgContext.drawPath(using: .fill)
+    
         
         // debug --------------------------
         if let context = debugContext {

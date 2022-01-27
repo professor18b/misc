@@ -11,7 +11,7 @@ import androidx.annotation.RequiresApi
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.PoseDetection
-import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
+import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
 import com.osmapps.golf.common.bean.domain.misc.Point
 import com.osmapps.golf.common.bean.domain.misc.Size
 import com.osmapps.golf.common.bean.domain.practice2.JointDetectionResult
@@ -34,8 +34,9 @@ class JointDetectionManager private constructor() {
     }
 
     private val options =
-        PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).setExecutor(
-            executor).build()
+        AccuratePoseDetectorOptions.Builder().setDetectorMode(AccuratePoseDetectorOptions.STREAM_MODE).setExecutor(
+            executor
+        ).build()
 
     fun detect(
         buffer: ByteBuffer,
@@ -44,8 +45,10 @@ class JointDetectionManager private constructor() {
         rotationDegree: Int
     ): List<DetectedPoint?> {
         val inputImage =
-            InputImage.fromByteBuffer(buffer, width, height, rotationDegree,
-                InputImage.IMAGE_FORMAT_YV12)
+            InputImage.fromByteBuffer(
+                buffer, width, height, rotationDegree,
+                InputImage.IMAGE_FORMAT_NV21
+            )
         return detect(inputImage)
     }
 
@@ -54,8 +57,10 @@ class JointDetectionManager private constructor() {
         return detect(inputImage)
     }
 
-    fun detectVideo(context: Context, uri: Uri,
-                    progressHandler: ((current: Int, total: Int) -> Unit)? = null): JointDetectionResult? {
+    fun detectVideo(
+        context: Context, uri: Uri,
+        progressHandler: ((index: Int, frameCount: Int) -> Unit)? = null
+    ): JointDetectionResult? {
         val path = uri.path
         checkNotNull(path) { "path should not be null" }
         println("detect path: $path")
@@ -98,6 +103,11 @@ class JointDetectionManager private constructor() {
             "mime: $mime, frameCount: $frameCount, width: $width, height: $height, frameRate: $frameRate, " +
                     "duration: $duration, rotation: $rotation, bitRate: $bitRate"
         )
+        val progressTotal = if (frameCount < 0) {
+            (frameRate * duration / 1000000 + 0.5).toInt()
+        } else {
+            frameCount
+        }
 
         decoder.configure(decoderFormat, null, null, 0)
         decoder.start()
@@ -150,8 +160,9 @@ class JointDetectionManager private constructor() {
                     if (doRender) {
                         decoder.getOutputImage(decoderOutputBufferIndex)?.let { image ->
                             val joints = detect(image, rotation)
-                            progressHandler?.invoke(++frameIndex, frameCount)
+                            progressHandler?.invoke(frameIndex, progressTotal)
                             detectedPoints.add(joints)
+                            frameIndex += 1
                         }
                     }
                     decoder.releaseOutputBuffer(decoderOutputBufferIndex, doRender)
@@ -168,6 +179,8 @@ class JointDetectionManager private constructor() {
         } else {
             Size(width, height)
         }
+
+        println("frameIndex: $frameIndex, frameCount: $frameCount")
         return JointDetectionResult(size, frameRate.toFloat(), frameCount, rotation, detectedPoints)
     }
 
@@ -186,9 +199,11 @@ class JointDetectionManager private constructor() {
         pose.allPoseLandmarks.forEach { poseLandmark ->
             JointName.parseFromMLKit(poseLandmark.landmarkType)?.let {
                 val point =
-                    Point.fromRotatedImage(poseLandmark.position.x.toDouble(),
+                    Point.fromRotatedImage(
+                        poseLandmark.position.x.toDouble(),
                         poseLandmark.position.y.toDouble(),
-                        inputImage.width, inputImage.height, inputImage.rotationDegrees)
+                        inputImage.width, inputImage.height, inputImage.rotationDegrees
+                    )
                 if (point != null) {
                     val detectedPoint = DetectedPoint(point, poseLandmark.inFrameLikelihood.toDouble())
                     detectedPoints[it.index()] = detectedPoint

@@ -124,7 +124,7 @@ class AnalysisViewController: BaseViewController {
         if let result = analyzedResult {
             descText.text = baseText.appending("\nexporting")
             DispatchQueue.global().async {
-                SkeletonVideoExporter.export(asset: self.videoSource, analyzeResult: result, noSkeleton: true, debug: true) { current, total in
+                SkeletonVideoExporter.export(asset: self.videoSource, analyzeResult: result, noSkeleton: false, debug: true) { current, total in
                     DispatchQueue.main.async {
                         self.descText.text = self.baseText.appending("\nexported: \(current+1)/\(total)")
                     }

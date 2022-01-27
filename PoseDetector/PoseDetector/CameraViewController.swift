@@ -7,6 +7,7 @@
 
 import UIKit
 import AVFoundation
+import CoreMotion
 
 class CameraViewController: BaseViewController {
     
@@ -87,18 +88,31 @@ class CameraViewController: BaseViewController {
         
         // get the interface orientaion from window scene to set proper video orientation on capture connection.
         let videoOrientation: AVCaptureVideoOrientation
-        switch view.window?.windowScene?.interfaceOrientation {
-        case .landscapeRight:
-            videoOrientation = .landscapeRight
-        case .landscapeLeft:
-            videoOrientation = .landscapeLeft
-        case .portrait:
-            videoOrientation = .portrait
-        case .portraitUpsideDown:
-            videoOrientation = .portraitUpsideDown
-        default:
-            videoOrientation = .portrait
-        }
+//        switch getCurrentDeviceOrientation() {
+//        case .landscapeRight:
+//            videoOrientation = .landscapeLeft
+//        case .landscapeLeft:
+//            videoOrientation = .landscapeRight
+//        case .portrait:
+//            videoOrientation = .portrait
+//        case .portraitUpsideDown:
+//            videoOrientation = .portraitUpsideDown
+//        default:
+//            videoOrientation = .portrait
+//        }
+      switch view.window?.windowScene?.interfaceOrientation {
+      case .landscapeRight:
+          videoOrientation = .landscapeRight
+      case .landscapeLeft:
+          videoOrientation = .landscapeLeft
+      case .portrait:
+          videoOrientation = .portrait
+      case .portraitUpsideDown:
+          videoOrientation = .portraitUpsideDown
+      default:
+          videoOrientation = .portrait
+      }
+      print("videoOrientation: \(videoOrientation.rawValue)")
         // create and setup video feed view
         cameraFeedView = CameraFeedView(frame: view.bounds, session: session, videoOrientation: videoOrientation)
         cameraFeedView.translatesAutoresizingMaskIntoConstraints = false
@@ -112,6 +126,28 @@ class CameraViewController: BaseViewController {
         ])
         cameraFeedSession?.startRunning()
     }
+  
+  private func getCurrentDeviceOrientation() -> UIDeviceOrientation {
+    if let deviceMotion = CMMotionManager().deviceMotion {
+      let x = deviceMotion.gravity.x;
+      let y = deviceMotion.gravity.y;
+      if (fabs(y) >= fabs(x)) {
+        if (y >= 0) {
+          return UIDeviceOrientation.portraitUpsideDown
+        } else {
+          return UIDeviceOrientation.portrait
+        }
+      }
+      else {
+        if (x >= 0) {
+          return UIDeviceOrientation.landscapeRight
+        } else{
+          return UIDeviceOrientation.landscapeLeft
+        }
+      }
+    }
+    return UIDevice.current.orientation
+  }
 }
 
 extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {

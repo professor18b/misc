@@ -16,18 +16,19 @@ object SkeletonMediaUtil {
         return extractor
     }
 
-    fun getVideoBitRate(width: Int, height: Int, bitRate: Int): Int {
+    fun getVideoBitRate(width: Int, height: Int, frameRate: Int, bitRate: Int): Int {
         val pixels = width * height
-        val kbps = if (pixels >= 1920 * 1080) {
-            4992
-        } else if (pixels >= 1280 * 720) {
-            2496
-        } else if (pixels >= 960 * 540) {
-            1856
-        } else {
-            1216
-        }
-        val compressed = kbps * 1024
+//        val kbps = if (pixels >= 1920 * 1080) {
+//            9984
+//        } else if (pixels >= 1280 * 720) {
+//            4992
+//        } else if (pixels >= 960 * 540) {
+//            2496
+//        } else {
+//            1856
+//        }
+//        val compressed = kbps * 1024
+        val compressed = (width * height * frameRate * 0.3).toInt()
         if (bitRate in 1 until compressed) {
             return bitRate
         }

@@ -43,7 +43,8 @@ dependencies {
     implementation 'androidx.navigation:navigation-fragment-ktx:2.3.0'
     implementation 'androidx.navigation:navigation-ui-ktx:2.3.0'
 
-    implementation 'com.google.mlkit:pose-detection:17.0.1-beta4'
+    implementation 'com.google.mlkit:pose-detection:17.0.1-beta5'
+    implementation 'com.google.mlkit:pose-detection-accurate:17.0.1-beta5'
 
     api project(':18birdies-common-app-request')
 

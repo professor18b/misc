@@ -1,6 +1,7 @@
 package com.squarevalley.i8birdies.improve.aicoach.detection
 
 import android.content.Context
+import android.graphics.*
 import android.media.*
 import android.net.Uri
 import android.os.Build
@@ -9,8 +10,10 @@ import androidx.annotation.RequiresApi
 import com.osmapps.framework.util.FileUtil
 import com.osmapps.golf.common.bean.domain.practice2.JointDetectionResult
 import com.osmapps.golf.common.bean.domain.practice2.SwingDetectionResult
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
+
 
 abstract class ExportException(message: String) : Exception(message)
 
@@ -27,16 +30,33 @@ private class MuxerWrapper(
     val segment: Pair<Int, Int>
 ) {
 
-    var startTimeUs: Long = -1
-    var endTimeUs: Long = -1
+    var startTimeUs = -1L
+    var endTimeUs = -1L
     var videoTrackIndex = -1
     var audioTrackIndex = -1
+
+    fun inSegment(frameIndex: Int) = frameIndex >= segment.first && frameIndex <= segment.second
+
+    fun inSegment(timeUs: Long) = timeUs in startTimeUs..endTimeUs
 
     fun addTrack(videoDecoderFormat: MediaFormat, audioDecoderFormat: MediaFormat?) {
         videoTrackIndex = muxer.addTrack(videoDecoderFormat)
         audioDecoderFormat?.let {
             audioTrackIndex = muxer.addTrack(it)
         }
+    }
+
+    fun writeVideoSampleData(frameIndex: Int, byteBuffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) {
+        if (startTimeUs == -1L) {
+            println("mux video start -- frameIndex: $frameIndex, segmentIndex: $segmentIndex, segment: $segment")
+            startTimeUs = bufferInfo.presentationTimeUs
+        }
+        endTimeUs = bufferInfo.presentationTimeUs
+        muxer.writeSampleData(videoTrackIndex, byteBuffer, bufferInfo)
+    }
+
+    fun writeAudioSampleData(byteBuffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) {
+        muxer.writeSampleData(audioTrackIndex, byteBuffer, bufferInfo)
     }
 }
 
@@ -65,17 +85,17 @@ class SkeletonVideoExporter {
             uri: Uri,
             jointDetectionResult: JointDetectionResult,
             swingDetectionResult: SwingDetectionResult,
-            progressHandler: ((swingIndex: Int, jointDetectionResult: JointDetectionResult, exportFile: String) -> Unit)? = null
+            progressHandler: ((swingIndex: Int, jointDetectionResult: JointDetectionResult, exportFile: String?) -> Unit)? = null
         ) {
             val path = uri.path
             checkNotNull(path) { "path should not be null" }
             Log.i(TAG, "export path: $path")
-            val videoExtractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
-            val videoInputTrack = SkeletonMediaUtil.getAndSelectVideoTrackIndex(videoExtractor)
+            var extractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
+            val videoInputTrack = SkeletonMediaUtil.getAndSelectVideoTrackIndex(extractor)
             if (videoInputTrack < 0) {
                 throw VideoTrackNotFoundException()
             }
-            val videoDecoderFormat = videoExtractor.getTrackFormat(videoInputTrack)
+            val videoDecoderFormat = extractor.getTrackFormat(videoInputTrack)
             val width = videoDecoderFormat.getInteger(MediaFormat.KEY_WIDTH)
             val height = videoDecoderFormat.getInteger(MediaFormat.KEY_HEIGHT)
             val frameCount = if (videoDecoderFormat.containsKey("frame-count")) {
@@ -113,76 +133,61 @@ class SkeletonVideoExporter {
             videoEncoderFormat.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             videoEncoderFormat.setLong(MediaFormat.KEY_DURATION, duration)
             videoEncoderFormat.setInteger(MediaFormat.KEY_ROTATION, rotation)
+//            videoEncoderFormat.setInteger(
+//                MediaFormat.KEY_BITRATE_MODE,
+//                MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CQ
+//            )
             videoEncoderFormat.setInteger(
                 MediaFormat.KEY_BIT_RATE,
-                SkeletonMediaUtil.getVideoBitRate(width, height, bitRate)
+                SkeletonMediaUtil.getVideoBitRate(width, height, frameRate, bitRate)
             )
             videoEncoderFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 0)
 
             // add audio
-            val audioExtractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
-            val audioInputTrack = SkeletonMediaUtil.getAndSelectAudioTrackIndex(audioExtractor)
-            var audioDecoderFormat: MediaFormat? = null
+            extractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
+            val audioInputTrack = SkeletonMediaUtil.getAndSelectAudioTrackIndex(extractor)
+            val audioDecoderFormat: MediaFormat?
             if (audioInputTrack >= 0) {
-                audioDecoderFormat = audioExtractor.getTrackFormat(audioInputTrack)
+//                audioDecoderFormat = audioExtractor.getTrackFormat(audioInputTrack)
+                audioDecoderFormat = null
+            } else {
+                audioDecoderFormat = null
             }
 
-            val muxers = createMuxers(jointDetectionResult, swingDetectionResult)
+            createMuxers(jointDetectionResult, swingDetectionResult).forEach { muxerWrapper ->
+                try {
+                    Log.i(TAG, "************** export video ${muxerWrapper.segmentIndex} start")
+                    val videoExtractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
+                    videoExtractor.selectTrack(videoInputTrack)
+                    muxVideo(
+                        videoExtractor,
+                        muxerWrapper,
+                        videoDecoderFormat,
+                        videoEncoderFormat,
+                        audioDecoderFormat,
+                        false
+                    )
+                    videoExtractor.release()
 
-            var currentMuxerIndex = 0
-            var currentFrameIndex = -1
-            muxVideo(videoExtractor, videoDecoderFormat, videoEncoderFormat, object : OnVideoEncoderListener {
-                override fun onOutputEncoded(
-                    frameIndex: Int,
-                    byteBuffer: ByteBuffer,
-                    bufferInfo: MediaCodec.BufferInfo
-                ) {
-                    muxers.find { frameIndex >= it.segment.first && frameIndex <= it.segment.second }?.apply {
-                        if (segmentIndex > currentMuxerIndex) {
-                            println("onOutputEncoded end -- frameIndex: $frameIndex, segmentIndex: $currentMuxerIndex, segment: ${muxers[currentMuxerIndex].segment}")
-                            progressHandler?.invoke(currentMuxerIndex, jointResult, exportFile)
-                            currentMuxerIndex = segmentIndex
-                        }
-
-                        muxer.writeSampleData(videoTrackIndex, byteBuffer, bufferInfo)
-                        if (startTimeUs == -1L) {
-                            println("onOutputEncoded start -- frameIndex: $frameIndex, segmentIndex: $segmentIndex, segment: ${muxers[currentMuxerIndex].segment}")
-                            startTimeUs = bufferInfo.presentationTimeUs
-                        }
-                        endTimeUs = bufferInfo.presentationTimeUs
-
-                        currentFrameIndex = frameIndex
+                    audioDecoderFormat?.let {
+                        val audioExtractor = SkeletonMediaUtil.createMediaExtractor(context, uri)
+                        audioExtractor.selectTrack(audioInputTrack)
+                        muxAudio(audioExtractor, muxerWrapper, audioDecoderFormat)
+                        audioExtractor.release()
                     }
+                    muxerWrapper.muxer.stop()
+                    muxerWrapper.muxer.release()
+                    Log.i(TAG, "************** export video ${muxerWrapper.segmentIndex} end")
+                    progressHandler?.invoke(
+                        muxerWrapper.segmentIndex,
+                        muxerWrapper.jointResult,
+                        muxerWrapper.exportFile
+                    )
+                } catch (ignored: Exception) {
+                    Log.i(TAG, "************** export video ${muxerWrapper.segmentIndex} failed， ignored: $ignored")
+                    progressHandler?.invoke(muxerWrapper.segmentIndex, muxerWrapper.jointResult, null)
                 }
-
-                override fun onOutputFormatChanged(frameIndex: Int, outputFormat: MediaFormat) {
-                    println("onOutputFormatChanged -- frameIndex: $frameIndex, outputFormat: $outputFormat")
-                    muxers.forEach { muxerWrapper ->
-                        muxerWrapper.addTrack(outputFormat, audioDecoderFormat)
-                        muxerWrapper.muxer.setOrientationHint(rotation)
-                        muxerWrapper.muxer.start()
-                    }
-                }
-            })
-            val currentMuxer = muxers[currentMuxerIndex]
-            println("onOutputEncoded end -- frameIndex: $currentFrameIndex, segmentIndex: $currentMuxerIndex, segment: ${currentMuxer.segment}")
-            progressHandler?.invoke(currentMuxerIndex, currentMuxer.jointResult, currentMuxer.exportFile)
-            videoExtractor.release()
-            Log.i(TAG, "************** export video finished")
-            if (audioDecoderFormat != null) {
-                muxAudio(audioExtractor, audioDecoderFormat) { byteBuffer, bufferInfo ->
-                    val timeUs = bufferInfo.presentationTimeUs
-                    muxers.find { timeUs >= it.startTimeUs && timeUs <= it.endTimeUs }?.apply {
-                        muxer.writeSampleData(audioTrackIndex, byteBuffer, bufferInfo)
-                    }
-                }
-                audioExtractor.release()
-                Log.i(TAG, "************** export audio finished")
             }
-            muxers.forEach { it.muxer.stop() }
-            muxers.forEach { it.muxer.release() }
-
-            Log.i(TAG, "************** export finished")
         }
 
         private fun createMuxers(
@@ -195,7 +200,7 @@ class SkeletonVideoExporter {
             swingDetectionResult.detectedSwings.forEach { detectedSwing ->
                 val outputFile = "${outputDir.absolutePath}/exported$index.mp4"//${SystemClock.uptimeMillis()}.mp4"
                 val muxer = MediaMuxer(outputFile, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-                val jointResult = jointDetectionResult.splitBy(detectedSwing)
+                val jointResult = jointDetectionResult.splitBy(detectedSwing, swingDetectionResult.scaled)
                 muxers.add(
                     MuxerWrapper(
                         muxer, jointResult, outputFile, index,
@@ -209,11 +214,9 @@ class SkeletonVideoExporter {
 
         private fun muxAudio(
             extractor: MediaExtractor,
-            decoderFormat: MediaFormat,
-            muxerHandler: (byteBuffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) -> Unit
+            muxerWrapper: MuxerWrapper,
+            decoderFormat: MediaFormat
         ) {
-            val mime = decoderFormat.getString(MediaFormat.KEY_MIME)!!
-            Log.i(TAG, "mime: $mime")
             val maxInputSize = if (decoderFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
                 decoderFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
             } else {
@@ -230,7 +233,9 @@ class SkeletonVideoExporter {
                         bufferInfo.presentationTimeUs = extractor.sampleTime
                         bufferInfo.flags = extractor.sampleFlags
                         bufferInfo.size = chunkSize
-                        muxerHandler(buffer, bufferInfo)
+                        if (muxerWrapper.inSegment(bufferInfo.presentationTimeUs)) {
+                            muxerWrapper.writeAudioSampleData(buffer, bufferInfo)
+                        }
                     }
                     extractor.advance()
                 } else {
@@ -286,17 +291,28 @@ class SkeletonVideoExporter {
         @Throws(VideoFormatNotSupportException::class)
         private fun muxVideo(
             extractor: MediaExtractor,
+            muxerWrapper: MuxerWrapper,
             decoderFormat: MediaFormat,
             encoderFormat: MediaFormat,
-            listener: OnVideoEncoderListener
+            audioDecoderFormat: MediaFormat?,
+            debugFrameIndex: Boolean = false
         ) {
+            val width = encoderFormat.getInteger(MediaFormat.KEY_WIDTH)
+            val height = encoderFormat.getInteger(MediaFormat.KEY_HEIGHT)
+            val rotation = if (encoderFormat.containsKey(MediaFormat.KEY_ROTATION)) {
+                encoderFormat.getInteger(MediaFormat.KEY_ROTATION)
+            } else {
+                0
+            }
+            val decodeMime = decoderFormat.getString(MediaFormat.KEY_MIME)!!
+            val encodeMime = encoderFormat.getString(MediaFormat.KEY_MIME)!!
             val decoder = try {
-                MediaCodec.createDecoderByType(decoderFormat.getString(MediaFormat.KEY_MIME)!!)
+                MediaCodec.createDecoderByType(decodeMime)
             } catch (e: Exception) {
                 throw VideoFormatNotSupportException()
             }
             val encoder = try {
-                MediaCodec.createEncoderByType(encoderFormat.getString(MediaFormat.KEY_MIME)!!)
+                MediaCodec.createEncoderByType(encodeMime)
             } catch (e: Exception) {
                 throw VideoFormatNotSupportException()
             }
@@ -304,13 +320,19 @@ class SkeletonVideoExporter {
             encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             val surface = encoder.createInputSurface()
             encoder.start()
-            decoder.configure(decoderFormat, surface, null, 0)
+            val surfaceToConfig = if (debugFrameIndex) {
+                null
+            } else {
+                surface
+            }
+            decoder.configure(decoderFormat, surfaceToConfig, null, 0)
             decoder.start()
 
             var decodeDone = false
             val bufferInfo = MediaCodec.BufferInfo()
-            var encodedCount = 0
-            var decoderCount = 0
+            var encodeIndex = 0
+            var decoderDequeOutputIndex = 0
+            var renderedIndex = 0
 
             loop@ while (true) {
                 if (!decodeDone) {
@@ -327,14 +349,16 @@ class SkeletonVideoExporter {
                                     0,
                                     MediaCodec.BUFFER_FLAG_END_OF_STREAM
                                 )
+//                                println("queue input, end of stream")
                             } else {
+//                                println("queue input, chunkSize: $chunkSize, sampleTime: ${extractor.sampleTime}, flags: ${extractor.sampleFlags}")
                                 val sampleTime = extractor.sampleTime
-                                val flags =
-                                    if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
-                                        MediaCodec.BUFFER_FLAG_KEY_FRAME
-                                    } else {
-                                        0
-                                    }
+                                val flags = extractor.sampleFlags
+//                                    if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+//                                        MediaCodec.BUFFER_FLAG_KEY_FRAME
+//                                    } else {
+//                                        0
+//                                    }
                                 decoder.queueInputBuffer(
                                     decoderInputBufferIndex,
                                     0,
@@ -354,12 +378,35 @@ class SkeletonVideoExporter {
                         }
                         else -> {
                             check(decoderOutputBufferIndex >= 0)
+//                            println("queue output, size: ${bufferInfo.size}, offset: ${bufferInfo.offset}, presentationTimeUs: ${bufferInfo.presentationTimeUs}, flags: ${bufferInfo.flags}")
                             val doRender = (bufferInfo.size != 0)
                             if (doRender) {
-                                decoderCount++
+                                if (debugFrameIndex) {
+                                    decoder.getOutputBuffer(decoderOutputBufferIndex)?.let { buffer ->
+                                        val ba = ByteArray(buffer.remaining())
+                                        buffer.get(ba)
+                                        val yuvImage = YuvImage(ba, ImageFormat.NV21, width, height, null)
+                                        val outputStream = ByteArrayOutputStream()
+                                        yuvImage.compressToJpeg(Rect(0, 0, width, height), 80, outputStream)
+                                        val outputBytes: ByteArray = outputStream.toByteArray()
+                                        val bmp = BitmapFactory.decodeByteArray(outputBytes, 0, outputBytes.size)
+                                        if (bmp != null) {
+                                            val canvas = surface.lockCanvas(null)
+                                            canvas.drawBitmap(bmp, 0F, 0F, null)
+                                            val paint = Paint()
+                                            paint.textSize = 32F
+                                            canvas.drawText("$renderedIndex", 100F, 100F, paint)
+                                            surface.unlockCanvasAndPost(canvas)
+                                        }
+                                        renderedIndex++
+                                    }
+                                }
                             }
+                            decoderDequeOutputIndex++
                             decoder.releaseOutputBuffer(decoderOutputBufferIndex, doRender)
-                            if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0 ||
+                                decoderDequeOutputIndex > muxerWrapper.segment.second
+                            ) {
                                 encoder.signalEndOfInputStream()
                                 decodeDone = true
                             }
@@ -369,17 +416,22 @@ class SkeletonVideoExporter {
 
                 when (val encoderOutputBufferIndex = encoder.dequeueOutputBuffer(bufferInfo, 1000)) {
                     MediaCodec.INFO_TRY_AGAIN_LATER -> {
-
                     }
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        listener.onOutputFormatChanged(encodedCount, encoder.outputFormat)
+                        muxerWrapper.addTrack(encoder.outputFormat, audioDecoderFormat)
+                        muxerWrapper.muxer.setOrientationHint(rotation)
+                        muxerWrapper.muxer.start()
                     }
                     else -> {
                         check(encoderOutputBufferIndex >= 0)
-                        if (bufferInfo.size != 0) {
+//                        println("encode, size: ${bufferInfo.size}, offset: ${bufferInfo.offset}, presentationTimeUs: ${bufferInfo.presentationTimeUs}, flags: ${bufferInfo.flags}")
+                        if (bufferInfo.size != 0 && (bufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0)) {
                             encoder.getOutputBuffer(encoderOutputBufferIndex)?.let { buffer ->
-                                listener.onOutputEncoded(encodedCount, buffer, bufferInfo)
-                                encodedCount++
+                                if (muxerWrapper.inSegment(encodeIndex)) {
+//                                    println("muxer encodeIndex: $encodeIndex")
+                                    muxerWrapper.writeVideoSampleData(encodeIndex, buffer, bufferInfo)
+                                }
+                                encodeIndex++
                             }
                         }
 
@@ -391,13 +443,14 @@ class SkeletonVideoExporter {
                 }
             }
             decoder.stop()
+            decoder.release()
             encoder.stop()
-            Log.i(TAG, "muxVideo: decoderCount: $decoderCount, encodedCount: $encodedCount")
+            encoder.release()
+            Log.i(
+                TAG,
+                "muxVideo: decoderDequeOutputIndex: $decoderDequeOutputIndex, renderedIndex: $renderedIndex, encodedCount: $encodeIndex"
+            )
         }
     }
 }
 
-interface OnVideoEncoderListener {
-    fun onOutputEncoded(frameIndex: Int, byteBuffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo)
-    fun onOutputFormatChanged(frameIndex: Int, outputFormat: MediaFormat)
-}

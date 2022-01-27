@@ -64,6 +64,7 @@ class FirstFragment : Fragment() {
         when (requestCode) {
             1 -> {
                 if (resultCode == RESULT_OK) {
+                    binding.resultText.text = null
                     data?.data?.let {
                         thread {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -72,8 +73,10 @@ class FirstFragment : Fragment() {
                                 if (jointDetectionResult != null) {
                                     val json =
                                         GsonFactory.createCommonGsonBuilder().create().toJson(jointDetectionResult)
+                                    var swingDetectionResult =
+                                        SwingDetectionManager.INSTANCE.detect(jointDetectionResult)
                                     MainScope().launch {
-                                        binding.resultText.setText(json)
+                                        binding.resultText.setText("swing size: ${swingDetectionResult.detectedSwings?.size}")
                                         val outputDir =
                                             requireContext().getExternalFilesDir(Environment.DIRECTORY_MOVIES)!!
                                         val outputFile = "${outputDir.absolutePath}/joint.json"
@@ -82,15 +85,18 @@ class FirstFragment : Fragment() {
                                         fos.close();
                                     }
                                     val exportedFilesSize = mutableMapOf<String, Int>()
-                                    var swingDetectionResult =
-                                        SwingDetectionManager.INSTANCE.detect(jointDetectionResult)
                                     if (swingDetectionResult.detectedSwings.isNullOrEmpty()) {
                                         println("no swing found")
                                         val segments = mutableListOf<SwingDetectionResult.SwingSegment>()
-                                        segments.add(SwingDetectionResult.SwingSegment(0, 10))
+                                        segments.add(SwingDetectionResult.SwingSegment(0, 11))
                                         segments.add(SwingDetectionResult.SwingSegment(11, 20))
                                         segments.add(SwingDetectionResult.SwingSegment(21, 30))
-                                        segments.add(SwingDetectionResult.SwingSegment(31, 40))
+                                        segments.add(
+                                            SwingDetectionResult.SwingSegment(
+                                                31,
+                                                jointDetectionResult.duration - 1
+                                            )
+                                        )
 
                                         val detectedSwing = SwingDetectionResult.DetectedSwing.fromSegments(
                                             SwingDetectionResult.StandType.FACE_ON,
@@ -99,10 +105,10 @@ class FirstFragment : Fragment() {
                                         )
 
                                         val segments2 = mutableListOf<SwingDetectionResult.SwingSegment>()
-                                        segments2.add(SwingDetectionResult.SwingSegment(50, 60))
-                                        segments2.add(SwingDetectionResult.SwingSegment(61, 70))
-                                        segments2.add(SwingDetectionResult.SwingSegment(71, 80))
-                                        segments2.add(SwingDetectionResult.SwingSegment(81, 90))
+                                        segments2.add(SwingDetectionResult.SwingSegment(120, 160))
+                                        segments2.add(SwingDetectionResult.SwingSegment(161, 170))
+                                        segments2.add(SwingDetectionResult.SwingSegment(171, 180))
+                                        segments2.add(SwingDetectionResult.SwingSegment(181, 190))
 
                                         val detectedSwing2 = SwingDetectionResult.DetectedSwing.fromSegments(
                                             SwingDetectionResult.StandType.FACE_ON,
@@ -112,7 +118,7 @@ class FirstFragment : Fragment() {
                                         val detectedSwings =
                                             mutableListOf<SwingDetectionResult.DetectedSwing>(
                                                 detectedSwing,
-                                                detectedSwing2
+//                                                detectedSwing2
                                             )
 
                                         swingDetectionResult = SwingDetectionResult(1.0, detectedSwings)
@@ -121,8 +127,9 @@ class FirstFragment : Fragment() {
                                         requireContext(),
                                         it,
                                         jointDetectionResult,
-                                        swingDetectionResult
+                                        swingDetectionResult,
                                     ) { current, joints, exportFile ->
+                                        checkNotNull(exportFile)
                                         exportedFilesSize[exportFile] = joints.duration
                                         println("exporting: $current, exportFile:$exportFile, duration: ${joints.duration}")
                                     }
@@ -136,13 +143,20 @@ class FirstFragment : Fragment() {
                                         check(videoInputTrack >= 0)
                                         val decoderFormat = extractor.getTrackFormat(videoInputTrack)
                                         val mime = decoderFormat.getString(MediaFormat.KEY_MIME)!!
+                                        val width = decoderFormat.getInteger(MediaFormat.KEY_WIDTH)
+                                        val height = decoderFormat.getInteger(MediaFormat.KEY_HEIGHT)
                                         val frameRate = decoderFormat.getInteger(MediaFormat.KEY_FRAME_RATE)
                                         val frameCount = if (decoderFormat.containsKey("frame-count")) {
                                             decoderFormat.getInteger("frame-count")
                                         } else {
                                             -1
                                         }
-                                        println("check -- file:$exportFile, mime: $mime, frameRate: $frameRate, frameCount: $frameCount, jointsCount: $count")
+                                        val rotation = if (decoderFormat.containsKey(MediaFormat.KEY_ROTATION)) {
+                                            decoderFormat.getInteger(MediaFormat.KEY_ROTATION)
+                                        } else {
+                                            -1
+                                        }
+                                        println("check -- file:$exportFile, mime: $mime, width: $width, height: $height, frameRate: $frameRate, rotation: $rotation, frameCount: $frameCount, jointsCount: $count")
                                     }
 
                                 } else {
